@@ -364,6 +364,10 @@ def build_prompt_json(scene_index:int, desc_vi:str, desc_tgt:str, lang_code:str,
             }
         },
         "graphics": {
+            # NOTE: Subtitles are configured here and sent to video generation API.
+            # Actual rendering is performed by the video generation service (e.g., Veo API)
+            # or post-processing pipeline. This config ensures subtitles are enabled
+            # with correct language and styling.
             "subtitles": { 
                 "enabled": True, 
                 "language": lang_code or "vi", 
