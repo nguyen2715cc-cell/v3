@@ -121,7 +121,7 @@ class ImageGenerationWorker(QThread):
     thumbnail_ready = pyqtSignal(int, bytes)
     finished = pyqtSignal(bool)
     
-    def __init__(self, outline, cfg, model_paths, prod_paths, use_whisk=False, character_bible=None):
+    def __init__(self, outline, cfg, model_paths, prod_paths, use_whisk=False, character_bible=None, account_mgr=None):
         super().__init__()
         self.outline = outline
         self.cfg = cfg
@@ -129,9 +129,23 @@ class ImageGenerationWorker(QThread):
         self.prod_paths = prod_paths
         self.use_whisk = use_whisk
         self.character_bible = character_bible
+        self.account_mgr = account_mgr
         self.should_stop = False
     
     def run(self):
+        try:
+            # Check if multi-account parallel mode is enabled
+            if self.account_mgr and self.account_mgr.is_multi_account_enabled():
+                self._run_parallel()
+            else:
+                self._run_sequential()
+            
+        except Exception as e:
+            self.progress.emit(f"Lỗi: {e}")
+            self.finished.emit(False)
+    
+    def _run_sequential(self):
+        """Original sequential implementation - backward compatibility"""
         try:
             from services.core.config import load as load_cfg
             cfg_data = load_cfg()
@@ -145,7 +159,7 @@ class ImageGenerationWorker(QThread):
             aspect_ratio = self.cfg.get('ratio', '9:16')
             model = 'gemini' if 'Gemini' in self.cfg.get('image_model', 'Gemini') else 'imagen_4'
             
-            self.progress.emit(f"[INFO] Sử dụng {len(api_keys)} API keys, model: {model}")
+            self.progress.emit(f"[INFO] Sequential mode: {len(api_keys)} API keys, model: {model}")
             
             if self.character_bible and hasattr(self.character_bible, 'characters'):
                 char_count = len(self.character_bible.characters)
@@ -276,8 +290,214 @@ class ImageGenerationWorker(QThread):
             self.finished.emit(True)
         
         except Exception as e:
-            self.progress.emit(f"Lỗi: {e}")
+            self.progress.emit(f"Lỗi sequential: {e}")
             self.finished.emit(False)
+    
+    def _run_parallel(self):
+        """Parallel implementation using multiple accounts"""
+        import threading
+        from queue import Queue
+        
+        try:
+            accounts = self.account_mgr.get_enabled_accounts()
+            num_accounts = len(accounts)
+            
+            self.progress.emit(f"🚀 Parallel mode: {num_accounts} accounts")
+            
+            aspect_ratio = self.cfg.get('ratio', '9:16')
+            model = 'gemini' if 'Gemini' in self.cfg.get('image_model', 'Gemini') else 'imagen_4'
+            
+            if self.character_bible and hasattr(self.character_bible, 'characters'):
+                char_count = len(self.character_bible.characters)
+                if char_count > 0:
+                    self.progress.emit(f"[CHARACTER BIBLE] Injecting consistency for {char_count} character(s)")
+            
+            # Prepare scenes
+            scenes = self.outline.get("scenes", [])
+            
+            # Distribute scenes across accounts using round-robin
+            batches = [[] for _ in range(num_accounts)]
+            for idx, scene in enumerate(scenes):
+                account_idx = idx % num_accounts
+                batches[account_idx].append((idx, scene))
+            
+            # Results queue for thread-safe communication
+            results_queue = Queue()
+            
+            # Create and start threads
+            threads = []
+            for i, (account, batch) in enumerate(zip(accounts, batches)):
+                if not batch:
+                    continue
+                    
+                thread = threading.Thread(
+                    target=self._process_image_batch,
+                    args=(account.tokens, batch, model, aspect_ratio, results_queue, i),
+                    daemon=True,
+                    name=f"ImageGen-{account.name}"
+                )
+                threads.append(thread)
+                self.progress.emit(f"Thread {i+1}: {len(batch)} scenes → {account.name}")
+                thread.start()
+            
+            # Monitor progress
+            total_scenes = len(scenes)
+            completed = 0
+            
+            while completed < total_scenes:
+                if self.should_stop:
+                    break
+                
+                try:
+                    # Wait for results from any thread
+                    scene_idx, img_data, error = results_queue.get(timeout=1.0)
+                    
+                    if img_data:
+                        self.scene_image_ready.emit(scene_idx, img_data)
+                        self.progress.emit(f"✓ Cảnh {scene_idx} ({completed+1}/{total_scenes})")
+                    elif error:
+                        self.progress.emit(f"✗ Cảnh {scene_idx}: {error}")
+                    
+                    completed += 1
+                    
+                except Exception:
+                    # Timeout or other error, check if threads still running
+                    if all(not t.is_alive() for t in threads):
+                        break
+            
+            # Wait for all threads to complete
+            for thread in threads:
+                thread.join(timeout=5.0)
+            
+            # Process thumbnails sequentially (usually fewer, so not worth parallelizing)
+            self._generate_thumbnails_sequential(model, aspect_ratio)
+            
+            self.finished.emit(True)
+            
+        except Exception as e:
+            self.progress.emit(f"Lỗi parallel: {e}")
+            self.finished.emit(False)
+    
+    def _process_image_batch(self, api_keys, batch, model, aspect_ratio, results_queue, thread_id):
+        """Process a batch of scenes in a thread"""
+        try:
+            for scene_idx, scene in batch:
+                if self.should_stop:
+                    break
+                
+                prompt = scene.get("prompt_image", "")
+                
+                # Inject character consistency
+                if self.character_bible and hasattr(self.character_bible, 'characters'):
+                    try:
+                        from services.google.character_bible import inject_character_consistency
+                        prompt = inject_character_consistency(prompt, self.character_bible)
+                    except Exception:
+                        pass
+                
+                img_data = None
+                error = None
+                
+                # Use Whisk if enabled
+                if self.use_whisk and self.model_paths and self.prod_paths:
+                    try:
+                        from services import whisk_service
+                        img_data = whisk_service.generate_image(
+                            prompt=prompt,
+                            model_image=self.model_paths[0] if self.model_paths else None,
+                            product_image=self.prod_paths[0] if self.prod_paths else None,
+                            debug_callback=None,
+                        )
+                    except Exception as e:
+                        error = f"Whisk: {str(e)[:50]}"
+                
+                # Fallback to Gemini/Imagen
+                if img_data is None and image_gen_service:
+                    try:
+                        img_data_url = image_gen_service.generate_image_with_rate_limit(
+                            text=prompt,
+                            api_keys=api_keys,
+                            model=model,
+                            aspect_ratio=aspect_ratio,
+                            delay_before=10,  # 10s delay per thread
+                            logger=None,
+                        )
+                        
+                        if img_data_url and convert_to_bytes:
+                            img_data, err = convert_to_bytes(img_data_url)
+                            if not img_data:
+                                error = err
+                    except Exception as e:
+                        error = f"Gemini: {str(e)[:50]}"
+                
+                # Queue result
+                results_queue.put((scene.get('index'), img_data, error))
+                
+        except Exception as e:
+            # Log thread error but don't crash
+            results_queue.put((0, None, f"Thread {thread_id} error: {str(e)[:50]}"))
+    
+    def _generate_thumbnails_sequential(self, model, aspect_ratio):
+        """Generate thumbnails sequentially (backward compatibility)"""
+        try:
+            from services.core.config import load as load_cfg
+            cfg_data = load_cfg()
+            api_keys = cfg_data.get('google_api_keys', [])
+            
+            social_media = self.outline.get("social_media", {})
+            versions = social_media.get("versions", [])
+            
+            for i, version in enumerate(versions):
+                if self.should_stop:
+                    break
+                
+                self.progress.emit(f"Tạo thumbnail {i+1}...")
+                
+                prompt = version.get("thumbnail_prompt", "")
+                text_overlay = version.get("thumbnail_text_overlay", "")
+                
+                try:
+                    if image_gen_service:
+                        thumb_data_url = image_gen_service.generate_image_with_rate_limit(
+                            text=prompt,
+                            api_keys=api_keys,
+                            model=model,
+                            aspect_ratio=aspect_ratio,
+                            delay_before=RATE_LIMIT_DELAY_SEC,
+                            logger=lambda msg: self.progress.emit(msg)
+                        )
+                        
+                        if thumb_data_url and convert_to_bytes:
+                            thumb_data, error = convert_to_bytes(thumb_data_url)
+                            
+                            if thumb_data:
+                                import tempfile
+                                
+                                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                                    tmp.write(thumb_data)
+                                    tmp_path = tmp.name
+                                
+                                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_out:
+                                    out_path = tmp_out.name
+                                
+                                if sscript:
+                                    sscript.generate_thumbnail_with_text(tmp_path, text_overlay, out_path)
+                                
+                                with open(out_path, "rb") as f:
+                                    final_thumb = f.read()
+                                
+                                os.unlink(tmp_path)
+                                os.unlink(out_path)
+                                
+                                self.thumbnail_ready.emit(i, final_thumb)
+                                self.progress.emit(f"Thumbnail {i+1}: ✓")
+                            else:
+                                self.progress.emit(f"Thumbnail {i+1}: {error}")
+                except Exception as e:
+                    self.progress.emit(f"Thumbnail {i+1} error: {e}")
+                    
+        except Exception as e:
+            self.progress.emit(f"Thumbnail generation error: {e}")
     
     def stop(self):
         self.should_stop = True
@@ -1277,9 +1497,14 @@ class VideoBanHangV5(QWidget):
         
         character_bible = self.cache.get("character_bible")
         
+        # Get account manager for multi-account support
+        from services.account_manager import get_account_manager
+        account_mgr = get_account_manager()
+        
         self.img_worker = ImageGenerationWorker(
             self.cache["outline"], cfg, model_paths,
-            self.prod_paths, use_whisk, character_bible
+            self.prod_paths, use_whisk, character_bible,
+            account_mgr=account_mgr
         )
         
         self.img_worker.progress.connect(self._append_log)
