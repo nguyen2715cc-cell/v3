@@ -4,12 +4,35 @@ import os
 import re
 
 from PyQt5.Qt import QDesktopServices
-from PyQt5.QtCore import QLocale, QSize, Qt, QThread, QUrl
-from PyQt5.QtGui import QColor, QFont, QKeySequence
-from PyQt5.QtWidgets import (,
+from PyQt5.QtCore import QLocale, QSize, Qt, QThread, QUrl, pyqtSignal
+from PyQt5.QtGui import QColor, QFont, QKeySequence, QIcon, QPixmap
+from PyQt5.QtWidgets import (
+    QWidget,
+    QLabel,
+    QVBoxLayout,
+    QHBoxLayout,
+    QGridLayout,
+    QFrame,
+    QScrollArea,
     QStackedWidget,
     QDialog,
-    QGridLayout,
+    QTextEdit,
+    QPushButton,
+    QApplication,
+    QMessageBox,
+    QLineEdit,
+    QComboBox,
+    QGroupBox,
+    QCheckBox,
+    QSpinBox,
+    QSlider,
+    QListWidget,
+    QListWidgetItem,
+    QTableWidget,
+    QTableWidgetItem,
+    QFileDialog,
+    QShortcut,
+    QMenu,
 )
 
 from utils import config as cfg
@@ -18,277 +41,6 @@ from services.voice_options import get_style_list, get_style_info, get_voices_fo
 from .text2video_panel_impl import _ASPECT_MAP, _LANGS, _VIDEO_MODELS, _Worker, build_prompt_json, get_model_key_from_display, extract_location_context
 
 
-
-
-class StoryboardView(QWidget):
-    """
-    Grid view for scenes - 3 columns layout
-    Light theme with hover effects
-    """
-    
-    scene_clicked = pyqtSignal(int)  # Emit scene number when clicked
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        
-        # Main scroll area
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setStyleSheet("QScrollArea { background: #FAFAFA; border: none; }")
-        
-        # Container for grid
-        container = QWidget()
-        self.grid_layout = QGridLayout(container)
-        self.grid_layout.setSpacing(16)
-        self.grid_layout.setContentsMargins(16, 16, 16, 16)
-        self.grid_layout.setAlignment(Qt.AlignTop)
-        
-        scroll.setWidget(container)
-        
-        # Main layout
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(scroll)
-        
-        self.scene_cards = {}  # Store card widgets by scene number
-    
-    def add_scene(self, scene_num, thumbnail_path, prompt_text, state_dict):
-        """
-        Add scene card to grid
-        
-        Args:
-            scene_num: Scene number (1-based)
-            thumbnail_path: Path to thumbnail image
-            prompt_text: Prompt text to display
-            state_dict: Full state dict for this scene
-        """
-        row = (scene_num - 1) // 3
-        col = (scene_num - 1) % 3
-        
-        # Create card widget
-        card = QFrame()
-        card.setFixedSize(260, 240)
-        card.setCursor(Qt.PointingHandCursor)
-        card.setStyleSheet("""
-            QFrame {
-                background: white;
-                border: 2px solid #E0E0E0;
-                border-radius: 8px;
-            }
-            QFrame:hover {
-                border: 2px solid #1E88E5;
-                background: #F8FCFF;
-            }
-        """)
-        
-        card_layout = QVBoxLayout(card)
-        card_layout.setSpacing(8)
-        card_layout.setContentsMargins(8, 8, 8, 8)
-        
-        # Thumbnail (16:9 aspect ratio)
-        thumb_label = QLabel()
-        thumb_label.setFixedSize(242, 136)
-        thumb_label.setAlignment(Qt.AlignCenter)
-        thumb_label.setStyleSheet("""
-            background: #F5F5F5; 
-            border: 1px solid #E0E0E0;
-            border-radius: 6px;
-            color: #9E9E9E;
-            font-size: 11px;
-        """)
-        
-        if thumbnail_path and os.path.exists(thumbnail_path):
-            pixmap = QPixmap(thumbnail_path).scaled(
-                242, 136, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            thumb_label.setPixmap(pixmap)
-        else:
-            thumb_label.setText("🖼️
-
-    def _switch_view(self, view_type):
-        """Switch between Card and Storyboard views"""
-        if view_type == 'card':
-            self.view_stack.setCurrentIndex(0)
-            self.btn_view_card.setChecked(True)
-            self.btn_view_storyboard.setChecked(False)
-        else:
-            self.view_stack.setCurrentIndex(1)
-            self.btn_view_card.setChecked(False)
-            self.btn_view_storyboard.setChecked(True)
-            self._refresh_storyboard()
-    
-    def _refresh_storyboard(self):
-        """Refresh storyboard with current scenes"""
-        self.storyboard_view.clear()
-        for scene_num in sorted(self._cards_state.keys()):
-            st = self._cards_state[scene_num]
-            prompt = st.get('tgt', st.get('vi', ''))
-            thumb = st.get('thumb', '')
-            self.storyboard_view.add_scene(scene_num, thumb, prompt, st)
-    
-    def _open_card_prompt_detail(self, item):
-        """Open detail dialog on double-click"""
-        try:
-            role = item.data(Qt.UserRole)
-            if isinstance(role, tuple) and role[0] == 'scene':
-                self._show_prompt_detail(int(role[1]))
-        except:
-            pass
-    
-    def _show_prompt_detail(self, scene_num):
-        """Show prompt detail dialog"""
-        st = self._cards_state.get(scene_num, {})
-        
-        dialog = QDialog(self)
-        dialog.setWindowTitle(f"Prompts - Cảnh {scene_num}")
-        dialog.setMinimumSize(750, 550)
-        dialog.setStyleSheet("""
-            QDialog { background: #FAFAFA; }
-            QTextEdit {
-                background: white;
-                border: 2px solid #E0E0E0;
-                border-radius: 6px;
-                padding: 8px;
-                font-size: 11px;
-            }
-            QPushButton {
-                background: white;
-                border: 2px solid #BDBDBD;
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background: #F5F5F5;
-                border: 2px solid #1E88E5;
-            }
-            QPushButton#btn_close {
-                background: #1E88E5;
-                border: 2px solid #1E88E5;
-                color: white;
-            }
-        """)
-        
-        layout = QVBoxLayout(dialog)
-        layout.setSpacing(16)
-        layout.setContentsMargins(20, 20, 20, 20)
-        
-        # Title
-        title = QLabel(f"<b style='font-size:16px; color:#1E88E5;'>📝 Prompts cho Cảnh {scene_num}</b>")
-        layout.addWidget(title)
-        
-        # Image prompt
-        layout.addWidget(QLabel("<b>📷 Prompt Ảnh (Vietnamese):</b>"))
-        ed_img = QTextEdit()
-        ed_img.setReadOnly(True)
-        ed_img.setPlainText(st.get('vi', '(Không có)'))
-        ed_img.setMaximumHeight(160)
-        layout.addWidget(ed_img)
-        
-        btn_img = QPushButton("📋 Copy Prompt Ảnh")
-        btn_img.setFixedHeight(36)
-        btn_img.clicked.connect(lambda: self._copy_to_clipboard(st.get('vi', '')))
-        layout.addWidget(btn_img)
-        
-        # Video prompt
-        layout.addWidget(QLabel("<b>🎬 Prompt Video (Target):</b>"))
-        ed_vid = QTextEdit()
-        ed_vid.setReadOnly(True)
-        ed_vid.setPlainText(st.get('tgt', '(Không có)'))
-        ed_vid.setMaximumHeight(160)
-        layout.addWidget(ed_vid)
-        
-        btn_vid = QPushButton("📋 Copy Prompt Video")
-        btn_vid.setFixedHeight(36)
-        btn_vid.clicked.connect(lambda: self._copy_to_clipboard(st.get('tgt', '')))
-        layout.addWidget(btn_vid)
-        
-        layout.addStretch()
-        
-        btn_close = QPushButton("✖ Đóng")
-        btn_close.setObjectName("btn_close")
-        btn_close.setFixedHeight(40)
-        btn_close.clicked.connect(dialog.close)
-        layout.addWidget(btn_close)
-        
-        dialog.exec_()
-    
-    def _copy_to_clipboard(self, text):
-        """Copy to clipboard"""
-        try:
-            QApplication.clipboard().setText(text)
-            QMessageBox.information(self, "Thành công", "✅ Đã copy vào clipboard!")
-        except Exception as e:
-            QMessageBox.warning(self, "Lỗi", f"Không thể copy: {e}")
-
-
-Chưa tạo ảnh")
-        
-        card_layout.addWidget(thumb_label)
-        
-        # Scene title (bold, blue)
-        title_label = QLabel(f"<b style='color:#1E88E5; font-size:13px;'>🎬 Cảnh {scene_num}</b>")
-        title_label.setAlignment(Qt.AlignCenter)
-        card_layout.addWidget(title_label)
-        
-        # Prompt preview (truncated)
-        preview_text = prompt_text[:50] + "..." if len(prompt_text) > 50 else prompt_text
-        desc_label = QLabel(preview_text)
-        desc_label.setWordWrap(True)
-        desc_label.setAlignment(Qt.AlignCenter)
-        desc_label.setFont(QFont("Segoe UI", 9))
-        desc_label.setStyleSheet("color: #757575;")
-        desc_label.setMaximumHeight(40)
-        card_layout.addWidget(desc_label)
-        
-        # Video status indicator
-        vids = state_dict.get('videos', {})
-        if vids:
-            completed = sum(1 for v in vids.values() if v.get('status') == 'completed')
-            total = len(vids)
-            status_label = QLabel(f"🎥 {completed}/{total} videos")
-            status_label.setAlignment(Qt.AlignCenter)
-            status_label.setFont(QFont("Segoe UI", 9))
-            status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
-            card_layout.addWidget(status_label)
-        
-        # Store scene number for click handling
-        card.scene_num = scene_num
-        card.mousePressEvent = lambda e: self.scene_clicked.emit(scene_num)
-        
-        # Add to grid
-        self.grid_layout.addWidget(card, row, col)
-        self.scene_cards[scene_num] = card
-    
-    def clear(self):
-        """Clear all scene cards"""
-        while self.grid_layout.count():
-            item = self.grid_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        self.scene_cards.clear()
-    
-    def update_scene_thumbnail(self, scene_num, thumbnail_path):
-        """Update thumbnail for a specific scene"""
-        card = self.scene_cards.get(scene_num)
-        if not card:
-            return
-        
-        # Find thumbnail label (first child widget)
-        thumb_label = card.findChild(QLabel)
-        if thumb_label and os.path.exists(thumbnail_path):
-            pixmap = QPixmap(thumbnail_path).scaled(
-                242, 136, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            thumb_label.setPixmap(pixmap)
-
-
-class CollapsibleGroupBox(QGroupBox):
-
-
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtGui import QPixmap
 
 class StoryboardView(QWidget):
     """Grid view for scenes - 3 columns, light theme"""
@@ -402,249 +154,6 @@ class StoryboardView(QWidget):
             if item.widget():
                 item.widget().deleteLater()
         self.cards.clear()
-    """A GroupBox that can be collapsed/expanded by clicking the title"""
-    
-    def __init__(self, title="", parent=None, accordion_group=None):
-        super().__init__(title, parent)
-        self.setCheckable(True)
-        self._accordion_group = accordion_group  # Store reference to sibling
-        
-        # Create container widget for content
-        self._content_widget = QWidget()
-        self._content_layout = QVBoxLayout(self._content_widget)
-        self._content_layout.setContentsMargins(10, 5, 10, 5)
-        self._content_layout.setSpacing(6)
-        
-        # Main layout
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 8, 0, 0)
-        main_layout.addWidget(self._content_widget)
-        
-        # ⭐ CRITICAL: Block signals during initialization
-        self.blockSignals(True)
-        self._content_widget.setVisible(False)
-        self.setChecked(False)
-        self.blockSignals(False)
-        
-        # Connect after setup
-        self.toggled.connect(self._on_toggle)
-    
-    def content_layout(self):
-        """Return the layout where content should be added"""
-        return self._content_layout
-    
-    def _on_toggle(self, checked):
-        """Show/hide content when toggled"""
-        self._content_widget.setVisible(checked)
-        
-        # Accordion behavior: close sibling when opening this one
-        if checked and self._accordion_group:
-            self._accordion_group.setChecked(False)
-
-
-    def __init__(self, title="", parent=None, accordion_group=None):
-        super().__init__(title, parent)
-        self.setCheckable(True)
-        self._accordion_group = accordion_group  # Store reference to sibling
-        
-        # Create container widget for content
-        self._content_widget = QWidget()
-        self._content_layout = QVBoxLayout(self._content_widget)
-        self._content_layout.setContentsMargins(10, 5, 10, 5)  # Reduced bottom margin: 10 → 8
-        self._content_layout.setSpacing(6)
-        
-        # Main layout
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 8, 0, 0)  # Reduced bottom: 20 → 5
-        main_layout.addWidget(self._content_widget)
-        
-        # Initially hide content and set unchecked AFTER layout setup
-        # ⭐ BLOCK SIGNALS during initialization
-        self.blockSignals(True)
-        self._content_widget.setVisible(False)
-        self.setChecked(False)  # Set AFTER hiding content
-        self.blockSignals(False)
-        
-        # Connect toggle AFTER initial setup
-        self.toggled.connect(self._on_toggle)
-    
-    def content_layout(self):
-        """Return the layout where content should be added"""
-        return self._content_layout
-    
-    def _on_toggle(self, checked):
-        """Show/hide content when toggled"""
-        self._content_widget.setVisible(checked)
-        
-        # Accordion behavior: close sibling when opening this one
-        if checked and self._accordion_group:
-            self._accordion_group.setChecked(False)
-
-    # ========================================
-    # Issue #7: Storyboard View and Prompt Detail Dialog
-    # ========================================
-    
-    def _switch_view(self, view_type):
-        """Switch between Card and Storyboard views"""
-        if view_type == 'card':
-            self.view_stack.setCurrentIndex(0)
-            self.btn_view_card.setChecked(True)
-            self.btn_view_storyboard.setChecked(False)
-        else:  # storyboard
-            self.view_stack.setCurrentIndex(1)
-            self.btn_view_card.setChecked(False)
-            self.btn_view_storyboard.setChecked(True)
-            self._refresh_storyboard()
-    
-    def _refresh_storyboard(self):
-        """Refresh storyboard view with current scenes"""
-        self.storyboard_view.clear()
-        
-        for scene_num in sorted(self._cards_state.keys()):
-            st = self._cards_state[scene_num]
-            prompt = st.get('tgt', st.get('vi', ''))
-            thumb_path = st.get('thumb', '')
-            self.storyboard_view.add_scene(scene_num, thumb_path, prompt, st)
-    
-    def _open_card_prompt_detail(self, item):
-        """Open prompt detail dialog when double-clicking card"""
-        try:
-            role = item.data(Qt.UserRole)
-            if not isinstance(role, tuple) or role[0] != 'scene':
-                return
-            
-            scene_num = int(role[1])
-            self._show_prompt_detail(scene_num)
-        except Exception as e:
-            print(f"Error opening prompt detail: {e}")
-    
-    def _show_prompt_detail(self, scene_num):
-        """Show detailed prompt dialog for a scene - Issue #7"""
-        st = self._cards_state.get(scene_num, {})
-        
-        dialog = QDialog(self)
-        dialog.setWindowTitle(f"Prompts - Cảnh {scene_num}")
-        dialog.setMinimumSize(750, 550)
-        dialog.setStyleSheet("""
-            QDialog {
-                background: #FAFAFA;
-            }
-            QLabel {
-                color: #212121;
-            }
-            QTextEdit {
-                background: white;
-                border: 2px solid #E0E0E0;
-                border-radius: 6px;
-                padding: 8px;
-                font-size: 11px;
-                color: #424242;
-            }
-            QPushButton {
-                background: white;
-                border: 2px solid #BDBDBD;
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-size: 13px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background: #F5F5F5;
-                border: 2px solid #1E88E5;
-            }
-            QPushButton#btn_close {
-                background: #1E88E5;
-                border: 2px solid #1E88E5;
-                color: white;
-            }
-            QPushButton#btn_close:hover {
-                background: #1976D2;
-            }
-        """)
-        
-        layout = QVBoxLayout(dialog)
-        layout.setSpacing(16)
-        layout.setContentsMargins(20, 20, 20, 20)
-        
-        # Title
-        title = QLabel(f"<b style='font-size:16px; color:#1E88E5;'>📝 Prompts cho Cảnh {scene_num}</b>")
-        layout.addWidget(title)
-        
-        # Separator
-        separator1 = QFrame()
-        separator1.setFrameShape(QFrame.HLine)
-        separator1.setStyleSheet("background: #E0E0E0;")
-        separator1.setFixedHeight(2)
-        layout.addWidget(separator1)
-        
-        # Image prompt section
-        lbl_img = QLabel("<b style='font-size:12px;'>📷 Prompt Ảnh (Vietnamese):</b>")
-        layout.addWidget(lbl_img)
-        
-        ed_img_prompt = QTextEdit()
-        ed_img_prompt.setReadOnly(True)
-        ed_img_prompt.setPlainText(st.get('vi', '(Không có prompt)'))
-        ed_img_prompt.setMaximumHeight(160)
-        layout.addWidget(ed_img_prompt)
-        
-        btn_copy_img = QPushButton("📋 Copy Prompt Ảnh")
-        btn_copy_img.setFixedHeight(36)
-        btn_copy_img.clicked.connect(lambda: self._copy_to_clipboard(st.get('vi', '')))
-        layout.addWidget(btn_copy_img)
-        
-        # Separator
-        separator2 = QFrame()
-        separator2.setFrameShape(QFrame.HLine)
-        separator2.setStyleSheet("background: #E0E0E0;")
-        separator2.setFixedHeight(2)
-        layout.addWidget(separator2)
-        
-        # Video prompt section
-        lbl_vid = QLabel("<b style='font-size:12px;'>🎬 Prompt Video (Target Language):</b>")
-        layout.addWidget(lbl_vid)
-        
-        ed_vid_prompt = QTextEdit()
-        ed_vid_prompt.setReadOnly(True)
-        ed_vid_prompt.setPlainText(st.get('tgt', '(Không có prompt)'))
-        ed_vid_prompt.setMaximumHeight(160)
-        layout.addWidget(ed_vid_prompt)
-        
-        btn_copy_vid = QPushButton("📋 Copy Prompt Video")
-        btn_copy_vid.setFixedHeight(36)
-        btn_copy_vid.clicked.connect(lambda: self._copy_to_clipboard(st.get('tgt', '')))
-        layout.addWidget(btn_copy_vid)
-        
-        layout.addStretch()
-        
-        # Close button
-        btn_close = QPushButton("✖ Đóng")
-        btn_close.setObjectName("btn_close")
-        btn_close.setFixedHeight(40)
-        btn_close.clicked.connect(dialog.close)
-        layout.addWidget(btn_close)
-        
-        dialog.exec_()
-    
-    def _copy_to_clipboard(self, text):
-        """Copy text to clipboard"""
-        try:
-            clipboard = QApplication.clipboard()
-            clipboard.setText(text)
-            QMessageBox.information(
-                self, 
-                "Thành công", 
-                "✅ Đã copy vào clipboard!",
-                QMessageBox.Ok
-            )
-        except Exception as e:
-            QMessageBox.warning(
-                self, 
-                "Lỗi", 
-                f"Không thể copy: {str(e)}",
-                QMessageBox.Ok
-            )
-
-
 
 
 class Text2VideoPane(QWidget):
@@ -1043,6 +552,8 @@ class Text2VideoPane(QWidget):
         self.cards.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.cards.setIconSize(QSize(240, 135))
         self.cards.itemDoubleClicked.connect(self._open_card_prompt_detail)
+        self.cards.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.cards.customContextMenuRequested.connect(self._show_scene_context_menu)
         self.view_stack.addWidget(self.cards)
 
         # Storyboard view
@@ -1285,33 +796,63 @@ class Text2VideoPane(QWidget):
             combobox.setStyleSheet("QComboBox { padding: 4px; }")
 
     def _render_card_text(self, scene):
-        """Render card text with HTML formatting - Issue #7"""
+        """Render card text with clear sections - Issue #8"""
         st = self._cards_state.get(scene, {})
         vi = st.get('vi', '').strip()
         tgt = st.get('tgt', '').strip()
         
-        # Bold blue title (14px)
         lines = ['<b style="font-size:14px; color:#1E88E5;">🎬 Cảnh ' + str(scene) + '</b>']
         lines.append('━━━━━━━━━━━━━━━━━━━━')
         
-        # Prompt (11px, max 150 chars)
+        # SECTION 1: Scene Prompt (unique per scene)
         if tgt or vi:
-            lines.append('<span style="font-size:11px; font-weight:600;">📝 PROMPT:</span>')
-            prompt = (tgt or vi)[:150]
-            if len(tgt or vi) > 150:
+            lines.append('<span style="font-size:11px; font-weight:600; color:#FF6B35;">📝 PROMPT CẢNH:</span>')
+            prompt = (tgt or vi)[:200]  # Increased from 150 to 200
+            if len(tgt or vi) > 200:
                 prompt += '...'
             lines.append('<span style="font-size:11px; color:#424242;">' + prompt + '</span>')
+            lines.append('')  # Empty line for spacing
         
-        # Videos
+        # SECTION 2: Character Consistency (if available)
+        character_info = st.get('character_consistency', '')
+        if character_info:
+            lines.append('<span style="font-size:10px; font-weight:600; color:#9C27B0;">👤 NHÂN VẬT:</span>')
+            char_preview = character_info[:100]
+            if len(character_info) > 100:
+                char_preview += '...'
+            lines.append('<span style="font-size:10px; color:#666;">' + char_preview + '</span>')
+            lines.append('')
+        
+        # SECTION 3: Video Status
         vids = st.get('videos', {})
         if vids:
-            lines.append('')
-            lines.append('<span style="font-size:11px; font-weight:600;">🎥 VIDEO:</span>')
+            lines.append('<span style="font-size:11px; font-weight:600; color:#4CAF50;">🎥 VIDEO:</span>')
             for copy, info in sorted(vids.items()):
                 status = info.get('status', '?')
-                tag = '<span style="font-size:10px; color:#616161;">  #' + str(copy) + ': ' + status
-                if info.get('completed_at'):
+                
+                # Color code by status
+                if status == 'COMPLETED' or status == 'DOWNLOADED':
+                    color = '#4CAF50'  # Green
+                    icon = '✅'
+                elif status in ['FAILED', 'ERROR']:
+                    color = '#F44336'  # Red
+                    icon = '❌'
+                elif status in ['PROCESSING', 'PENDING', 'RENDERING']:
+                    color = '#FF9800'  # Orange
+                    icon = '⏳'
+                else:
+                    color = '#757575'  # Gray
+                    icon = '⚪'
+                
+                tag = f'<span style="font-size:10px; color:{color};">{icon} #{copy}: {status}'
+                
+                # Show error reason if available
+                error_msg = info.get('error_reason', '')
+                if error_msg:
+                    tag += f' - {error_msg[:50]}'
+                elif info.get('completed_at'):
                     tag += ' — ' + info['completed_at']
+                
                 tag += '</span>'
                 lines.append(tag)
                 
@@ -1680,7 +1221,7 @@ class Text2VideoPane(QWidget):
         if scene <= 0 or copy <= 0: return
         st = self._cards_state.setdefault(scene, {'vi':'','tgt':'','thumb':'','videos':{}})
         v  = st['videos'].setdefault(copy, {})
-        for k in ('status','url','path','thumb','completed_at'):
+        for k in ('status','url','path','thumb','completed_at','error_reason'):
             if data.get(k): v[k] = data.get(k)
         
         # Track video download path - Issue #8 fix
@@ -1709,8 +1250,122 @@ class Text2VideoPane(QWidget):
         s = (status or "").upper()
         if s in ("QUEUED","PROCESSING","RENDERING","DOWNLOADING"): return QColor("#36D1BE")
         if s in ("COMPLETED","DOWNLOADED","UPSCALED_4K"): return QColor("#3FD175")
-        if s in ("ERROR","FAILED"): return QColor("#ED6D6A")
+        if s in ("ERROR","FAILED","FAILED_START","DOWNLOAD_FAILED","DONE_NO_URL"): return QColor("#ED6D6A")
         return None
+    
+    def _show_scene_context_menu(self, position):
+        """Show context menu for scene cards - Issue #9"""
+        item = self.cards.itemAt(position)
+        if not item:
+            return
+        
+        # Get scene number from item data
+        role = item.data(Qt.UserRole)
+        if not isinstance(role, tuple) or role[0] != 'scene':
+            return
+        
+        scene_num = int(role[1])
+        scene_state = self._cards_state.get(scene_num, {})
+        
+        # Check if any videos failed
+        videos = scene_state.get('videos', {})
+        has_failed = any(
+            v.get('status', '').upper() in ['FAILED', 'ERROR', 'FAILED_START', 'DOWNLOAD_FAILED', 'DONE_NO_URL']
+            for v in videos.values()
+        )
+        
+        if not has_failed:
+            return  # Only show menu for failed scenes
+        
+        # Create context menu
+        menu = QMenu(self)
+        
+        retry_action = menu.addAction("🔄 Tạo lại video cho cảnh này")
+        action = menu.exec_(self.cards.mapToGlobal(position))
+        
+        if action == retry_action:
+            self._retry_scene(scene_num)
+    
+    def _retry_scene(self, scene_num):
+        """Retry video generation for a single scene - Issue #9"""
+        scene_state = self._cards_state.get(scene_num, {})
+        if not scene_state:
+            QMessageBox.warning(self, "Lỗi", f"Không tìm thấy dữ liệu cảnh {scene_num}")
+            return
+        
+        # Confirm retry
+        reply = QMessageBox.question(
+            self,
+            "Xác nhận",
+            f"Bạn có muốn tạo lại video cho Cảnh {scene_num}?\n\nVideo cũ sẽ bị ghi đè.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply != QMessageBox.Yes:
+            return
+        
+        # Get scene data
+        vi_prompt = scene_state.get('vi', '')
+        tgt_prompt = scene_state.get('tgt', '')
+        
+        if not vi_prompt and not tgt_prompt:
+            QMessageBox.warning(self, "Lỗi", "Không tìm thấy prompt cho cảnh này")
+            return
+        
+        # Build scene data for regeneration
+        self._append_log(f"[INFO] Đang tạo lại video cho Cảnh {scene_num}...")
+        
+        # Get current settings
+        lang_code = self.cb_out_lang.currentData() if hasattr(self, 'cb_out_lang') else 'vi'
+        ratio = self.cb_ratio.currentText() if hasattr(self, 'cb_ratio') else '16:9'
+        style = self.cb_style.currentText() if hasattr(self, 'cb_style') else 'Cinematic'
+        model = self.cb_model.currentData() if hasattr(self, 'cb_model') else 'imagen3'
+        copies = self._t2v_get_copies() if hasattr(self, '_t2v_get_copies') else 1
+        
+        # Build single scene for retry
+        scene_data = {
+            'prompt': build_prompt_json(
+                scene_num,
+                vi_prompt,
+                tgt_prompt,
+                lang_code,
+                ratio,
+                style
+            )
+        }
+        
+        # Create worker for single scene
+        payload = {
+            'model': model,
+            'scenes': [scene_data],
+            'copies': copies,
+            'up4k': False,
+            'title': self._title or f"Scene_{scene_num}",
+            'ctx': self._ctx
+        }
+        
+        # Clear existing videos for this scene
+        if scene_num in self._cards_state:
+            self._cards_state[scene_num]['videos'] = {}
+            # Update display
+            for i in range(self.cards.count()):
+                it = self.cards.item(i)
+                role = it.data(Qt.UserRole)
+                if isinstance(role, tuple) and role == ('scene', scene_num):
+                    it.setText(self._render_card_text(scene_num))
+                    break
+        
+        # Start worker
+        self.worker = _Worker("video", payload)
+        self.worker.log.connect(self._append_log)
+        self.worker.job_card.connect(self._on_job_card)
+        self.worker.job_finished.connect(lambda: self._append_log("[INFO] Hoàn tất tạo lại video!"))
+        
+        self.thread = QThread()
+        self.worker.moveToThread(self.thread)
+        self.thread.started.connect(self.worker.run)
+        self.thread.start()
+
 
     def _t2v_tick(self):
         try:
