@@ -567,7 +567,7 @@ class _Worker(QObject):
             else:
                 # All copies failed to start
                 for copy_idx in range(1, copies+1):
-                    card={"scene":scene_idx,"copy":copy_idx,"status":"FAILED_START","json":scene["prompt"],"url":"","path":"","thumb":"","dir":dir_videos}
+                    card={"scene":scene_idx,"copy":copy_idx,"status":"FAILED_START","error_reason":"Failed to start video generation","json":scene["prompt"],"url":"","path":"","thumb":"","dir":dir_videos}
                     self.job_card.emit(card)
 
         # polling with improved error handling
@@ -633,6 +633,7 @@ class _Worker(QObject):
                     cp = card['copy']
                     self.log.emit(f"[ERR] Cảnh {sc} video {cp}: operation index {op_index} out of bounds (only {len(op_names)} operations)")
                     card["status"] = "FAILED"
+                    card["error_reason"] = "Operation index out of bounds"
                     self.job_card.emit(card)
                     continue
                 
@@ -691,6 +692,7 @@ class _Worker(QObject):
                                     self.log.emit(f"[ERR] Download failed after {max_download_retries} attempts")
                                     card["status"] = "DOWNLOAD_FAILED"
                                     card["url"] = video_url
+                                    card["error_reason"] = "Download failed after retries"
                                     self.job_card.emit(card)
                         except Exception as e:
                             # Track download retries for exceptions
@@ -708,6 +710,7 @@ class _Worker(QObject):
                                 self.log.emit(f"[ERR] Download error after {max_download_retries} attempts: {e}")
                                 card["status"] = "DOWNLOAD_FAILED"
                                 card["url"] = video_url
+                                card["error_reason"] = f"Download error: {str(e)[:50]}"
                                 self.job_card.emit(card)
                         
                         self.job_card.emit(card)
@@ -715,11 +718,29 @@ class _Worker(QObject):
                         # Video marked successful but no URL - this is an error state
                         self.log.emit(f"[ERR] Scene {scene} Copy {copy_num}: No video URL in response")
                         card["status"] = "DONE_NO_URL"
+                        card["error_reason"] = "No video URL in response"
                         self.job_card.emit(card)
                 
                 elif status == 'MEDIA_GENERATION_STATUS_FAILED':
+                    # Try to extract error details from API response
+                    error_info = raw_response.get('operation', {}).get('error', {})
+                    error_message = error_info.get('message', '')
+                    
+                    # Categorize the error
+                    if 'quota' in error_message.lower() or 'limit' in error_message.lower():
+                        error_reason = "Vượt quota API"
+                    elif 'policy' in error_message.lower() or 'content' in error_message.lower() or 'safety' in error_message.lower():
+                        error_reason = "Nội dung không phù hợp"
+                    elif 'timeout' in error_message.lower():
+                        error_reason = "Timeout"
+                    elif error_message:
+                        error_reason = error_message[:80]
+                    else:
+                        error_reason = "Video generation failed"
+                    
                     card["status"] = "FAILED"
-                    self.log.emit(f"[ERR] Scene {scene} Copy {copy_num} FAILED")
+                    card["error_reason"] = error_reason
+                    self.log.emit(f"[ERR] Scene {scene} Copy {copy_num} FAILED: {error_reason}")
                     self.job_card.emit(card)
                 
                 else:
