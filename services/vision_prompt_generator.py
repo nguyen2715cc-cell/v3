@@ -8,7 +8,13 @@ import base64
 import os
 from typing import List, Optional
 import requests
-from PIL import Image
+
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    Image = None
 
 
 class VisionPromptGenerator:
@@ -161,6 +167,9 @@ class VisionPromptGenerator:
         Returns:
             Base64 encoded image data
         """
+        if not PIL_AVAILABLE:
+            raise RuntimeError("PIL/Pillow is required for image processing. Install it with: pip install Pillow")
+        
         try:
             # Open and resize image if needed
             img = Image.open(image_path)
