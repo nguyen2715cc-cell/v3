@@ -8,7 +8,7 @@ from typing import Tuple
 try:
     from dotenv import load_dotenv
     DOTENV_AVAILABLE = True
-except ImportError:
+except ModuleNotFoundError:
     DOTENV_AVAILABLE = False
 
 # Setup logger
@@ -55,6 +55,9 @@ def validate_config(cfg: dict) -> Tuple[bool, str]:
         
     Returns:
         Tuple of (is_valid, error_message). If valid, error_message is empty.
+        
+    Note:
+        - None values are accepted for string fields to handle legacy configs
     """
     if not isinstance(cfg, dict):
         return False, "Config must be a dictionary"
@@ -73,7 +76,7 @@ def validate_config(cfg: dict) -> Tuple[bool, str]:
             expected_type = type(default_value)
             actual_value = cfg[key]
             
-            # Allow None or empty string for string fields
+            # Allow None for string fields (backward compatibility with legacy configs)
             if expected_type == str and actual_value is None:
                 continue
                 
@@ -119,6 +122,19 @@ def load() -> dict:
     return cfg
 
 
+def _parse_comma_separated_env(env_value: str) -> list:
+    """
+    Parse comma-separated environment variable into list of non-empty strings.
+    
+    Args:
+        env_value: Comma-separated string from environment variable
+        
+    Returns:
+        List of stripped, non-empty strings
+    """
+    return [k.strip() for k in env_value.split(",") if k.strip()]
+
+
 def load_with_env() -> dict:
     """
     Load config merged with environment variables.
@@ -144,12 +160,12 @@ def load_with_env() -> dict:
     # Override with environment variables if present
     google_keys_env = os.getenv("GOOGLE_API_KEYS")
     if google_keys_env:
-        cfg["google_keys"] = [k.strip() for k in google_keys_env.split(",") if k.strip()]
+        cfg["google_keys"] = _parse_comma_separated_env(google_keys_env)
         logger.info(f"Loaded {len(cfg['google_keys'])} Google API keys from environment")
     
     elevenlabs_keys_env = os.getenv("ELEVENLABS_API_KEYS")
     if elevenlabs_keys_env:
-        cfg["elevenlabs_keys"] = [k.strip() for k in elevenlabs_keys_env.split(",") if k.strip()]
+        cfg["elevenlabs_keys"] = _parse_comma_separated_env(elevenlabs_keys_env)
         logger.info(f"Loaded {len(cfg['elevenlabs_keys'])} ElevenLabs API keys from environment")
     
     default_project_id_env = os.getenv("DEFAULT_PROJECT_ID")
