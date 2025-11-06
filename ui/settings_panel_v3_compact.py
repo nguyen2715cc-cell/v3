@@ -228,7 +228,6 @@ class SettingsPanelV3Compact(QWidget):
         multi_acc_layout.addWidget(hint2)
         
         # Account list widget
-        from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox
         self.accounts_table = QTableWidget()
         self.accounts_table.setColumnCount(4)
         self.accounts_table.setHorizontalHeaderLabels(["Enabled", "Account Name", "Project ID", "Tokens"])
@@ -420,8 +419,6 @@ class SettingsPanelV3Compact(QWidget):
     
     def _add_account(self):
         """Add a new account via dialog"""
-        from PyQt5.QtWidgets import QDialog, QDialogButtonBox
-        
         dialog = QDialog(self)
         dialog.setWindowTitle("Add Google Labs Account")
         dialog.setMinimumWidth(500)
@@ -469,7 +466,6 @@ class SettingsPanelV3Compact(QWidget):
             tokens = [line.strip() for line in tokens_text.split('\n') if line.strip()]
             
             if not name or not project_id or not tokens:
-                QMessageBox.warning(self, "Invalid Input", "Please fill all fields")
                 QMessageBox.warning(self, "Invalid Input", "Please fill all fields")
                 return
             
