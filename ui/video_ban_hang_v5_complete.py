@@ -158,9 +158,8 @@ class ImageGenerationWorker(QThread):
                 if self.should_stop:
                     break
                 
-                if i > 0:
-                    self.progress.emit(f"[RATE LIMIT] Chờ {RATE_LIMIT_DELAY_SEC}s...")
-                    time.sleep(RATE_LIMIT_DELAY_SEC)
+                # NOTE: Rate limiting now handled by generate_image_with_rate_limit()
+                # No need for manual delay here anymore
                 
                 self.progress.emit(f"Tạo ảnh cảnh {scene.get('index')}...")
                 
@@ -193,12 +192,13 @@ class ImageGenerationWorker(QThread):
                     try:
                         self.progress.emit(f"Cảnh {scene.get('index')}: Dùng Gemini...")
                         
+                        # Enhanced: Respect rate limit for subsequent requests
                         img_data_url = image_gen_service.generate_image_with_rate_limit(
                             text=prompt,
                             api_keys=api_keys,
                             model=model,
                             aspect_ratio=aspect_ratio,
-                            delay_before=0,
+                            delay_before=RATE_LIMIT_DELAY_SEC if i > 0 else 0,
                             logger=lambda msg: self.progress.emit(msg),
                         )
                         
@@ -225,8 +225,7 @@ class ImageGenerationWorker(QThread):
                 if self.should_stop:
                     break
                 
-                self.progress.emit(f"[RATE LIMIT] Chờ {RATE_LIMIT_DELAY_SEC}s...")
-                time.sleep(RATE_LIMIT_DELAY_SEC)
+                # NOTE: Rate limiting now handled by generate_image_with_rate_limit()
                 
                 self.progress.emit(f"Tạo thumbnail {i+1}...")
                 
@@ -235,12 +234,13 @@ class ImageGenerationWorker(QThread):
                 
                 try:
                     if image_gen_service:
+                        # Enhanced: Always delay for thumbnails (come after scene images)
                         thumb_data_url = image_gen_service.generate_image_with_rate_limit(
                             text=prompt,
                             api_keys=api_keys,
                             model=model,
                             aspect_ratio=aspect_ratio,
-                            delay_before=0,
+                            delay_before=RATE_LIMIT_DELAY_SEC,
                             logger=lambda msg: self.progress.emit(msg)
                         )
                         
