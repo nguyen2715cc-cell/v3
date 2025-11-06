@@ -28,6 +28,9 @@ FONT_BODY = QFont("Segoe UI", 13)
 FONT_SMALL = QFont("Segoe UI", 12)
 FONT_MONO = QFont("Courier New", 11)
 
+# Default Project ID constant
+DEFAULT_PROJECT_ID = '87b19267-13d6-49cd-a7ed-db19a90c9339'
+
 def _ts():
     return datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')
 
@@ -80,7 +83,75 @@ class SettingsPanelV3Compact(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.state = cfg.load()
+        self._migrated = False  # Track migration status
         self._build_ui()
+    
+    def showEvent(self, event):
+        """Handle panel show - perform auto-migration on first show"""
+        super().showEvent(event)
+        # Auto-migrate on first show
+        if not self._migrated:
+            self._auto_migrate_old_config()
+            self._migrated = True
+    
+    def _auto_migrate_old_config(self):
+        """
+        Auto-migrate old single-token config to multi-account format
+        Called on first Settings panel load
+        """
+        # Use existing state instead of reloading
+        config = self.state
+        
+        # Check if old 'tokens' or 'labs_tokens' array exists but no 'labs_accounts'
+        old_tokens = config.get('tokens', [])
+        old_labs_tokens = config.get('labs_tokens', [])
+        existing_accounts = config.get('labs_accounts', [])
+        
+        # Combine all old token sources (preserve order, remove duplicates)
+        all_old_tokens = list(dict.fromkeys(old_tokens + old_labs_tokens))
+        
+        if all_old_tokens and not existing_accounts:
+            # Migration needed
+            reply = QMessageBox.question(
+                self, 
+                "Migrate Configuration",
+                f"Found {len(all_old_tokens)} old token(s).\n\n"
+                "Migrate to multi-account format?\n"
+                "(Old tokens will be preserved as backup)",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            
+            if reply == QMessageBox.Yes:
+                # Migrate
+                accounts = []
+                default_project_id = config.get('flow_project_id', DEFAULT_PROJECT_ID)
+                
+                for i, token in enumerate(all_old_tokens):
+                    accounts.append({
+                        'name': f'Account {i+1} (Migrated)',
+                        'tokens': [token],
+                        'project_id': default_project_id,
+                        'enabled': True
+                    })
+                
+                # Save migrated config
+                config['labs_accounts'] = accounts
+                config['tokens_backup'] = all_old_tokens  # Keep backup
+                cfg.save(config)
+                
+                # Reload state and account table
+                self.state = cfg.load()
+                if hasattr(self, 'accounts_table') and self.accounts_table is not None:
+                    self._load_accounts_table()
+                
+                QMessageBox.information(
+                    self, 
+                    "Migration Complete",
+                    f"✅ Migrated {len(all_old_tokens)} token(s) to multi-account format.\n\n"
+                    "Old tokens backed up as 'tokens_backup' in config."
+                )
+    
     
     def _build_ui(self):
         scroll = QScrollArea()
@@ -145,25 +216,11 @@ class SettingsPanelV3Compact(QWidget):
         accordion_grid.setSpacing(8)
         
         # Column 1
-        labs_section = AccordionSection("Google Labs Token (OAuth)")
-        labs_init = self.state.get('labs_tokens') or self.state.get('tokens') or []
-        self.w_labs = KeyListV2(kind='google-labs', initial=labs_init)
-        labs_section.add_content_widget(self.w_labs)
-        
-        self.ed_project = _line('Project ID')
-        self.ed_project.setText(self.state.get('flow_project_id', '87b19267-13d6-49cd-a7ed-db19a90c9339'))
-        proj_row = QHBoxLayout()
-        proj_row.addWidget(QLabel("Project ID:"))
-        proj_row.addWidget(self.ed_project)
-        labs_section.add_content_layout(proj_row)
-        
-        accordion_grid.addWidget(labs_section, 0, 0)
-        
         google_section = AccordionSection("Google API Keys")
         g_list = self.state.get('google_api_keys') or []
         self.w_google = KeyListV2(kind='google', initial=g_list)
         google_section.add_content_widget(self.w_google)
-        accordion_grid.addWidget(google_section, 1, 0)
+        accordion_grid.addWidget(google_section, 0, 0)
         
         # Column 2
         eleven_section = AccordionSection("Elevenlabs API Keys")
@@ -195,7 +252,6 @@ class SettingsPanelV3Compact(QWidget):
         btn_expand = CompactButton("📂 Expand All")
         btn_expand.setObjectName("btn_expand")
         btn_expand.clicked.connect(lambda: [
-            labs_section.set_expanded(True),
             google_section.set_expanded(True),
             eleven_section.set_expanded(True),
             openai_section.set_expanded(True)
@@ -205,7 +261,6 @@ class SettingsPanelV3Compact(QWidget):
         btn_collapse = CompactButton("📁 Collapse All")
         btn_collapse.setObjectName("btn_collapse")
         btn_collapse.clicked.connect(lambda: [
-            labs_section.set_expanded(False),
             google_section.set_expanded(False),
             eleven_section.set_expanded(False),
             openai_section.set_expanded(False)
@@ -217,14 +272,18 @@ class SettingsPanelV3Compact(QWidget):
         root.addWidget(api_group)
         
         # === MULTI-ACCOUNT MANAGEMENT (ISSUE #4) ===
-        multi_acc_group = QGroupBox("🔄 Multi-Account Management (NEW)")
+        multi_acc_group = QGroupBox("🔑 Multi-Account Management")
         multi_acc_group.setFont(FONT_H2)
         multi_acc_layout = QVBoxLayout(multi_acc_group)
         multi_acc_layout.setSpacing(6)
         
-        hint2 = QLabel("💡 Configure multiple Google Labs accounts for parallel processing and higher quotas")
+        hint2 = QLabel(
+            "💡 Tip: Use multiple accounts to avoid rate limits and increase processing speed!\n"
+            "Each account will process scenes in parallel."
+        )
         hint2.setFont(FONT_SMALL)
-        hint2.setStyleSheet("color: #757575; font-style: italic;")
+        hint2.setWordWrap(True)
+        hint2.setStyleSheet("color: #666; font-size: 11px; padding: 8px;")
         multi_acc_layout.addWidget(hint2)
         
         # Account list widget
@@ -237,6 +296,10 @@ class SettingsPanelV3Compact(QWidget):
         self.accounts_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.accounts_table.setMaximumHeight(200)
         self.accounts_table.setAlternatingRowColors(True)
+        self.accounts_table.setToolTip(
+            "Add multiple Google Labs accounts here.\n"
+            "Jobs will be distributed across accounts automatically."
+        )
         self.accounts_table.setStyleSheet("""
             QTableWidget {
                 background: white;
@@ -252,6 +315,27 @@ class SettingsPanelV3Compact(QWidget):
         self._load_accounts_table()
         
         multi_acc_layout.addWidget(self.accounts_table)
+        
+        # Default Project ID for new accounts
+        proj_row = QHBoxLayout()
+        proj_row.setSpacing(8)
+        proj_label = QLabel("Default Project ID:")
+        proj_label.setFont(FONT_SMALL)
+        proj_row.addWidget(proj_label)
+        
+        self.ed_project = _line('Project ID for new accounts')
+        self.ed_project.setText(self.state.get('flow_project_id', DEFAULT_PROJECT_ID))
+        self.ed_project.setToolTip(
+            "Default Project ID for new accounts.\n"
+            "Each account can have its own Project ID in the table above."
+        )
+        proj_row.addWidget(self.ed_project, 1)
+        
+        proj_info = QLabel("ℹ️ Used as default for new accounts")
+        proj_info.setStyleSheet("color: #666; font-size: 10px;")
+        proj_row.addWidget(proj_info)
+        
+        multi_acc_layout.addLayout(proj_row)
         
         # Account management buttons
         acc_buttons = QHBoxLayout()
@@ -431,9 +515,11 @@ class SettingsPanelV3Compact(QWidget):
         ed_name = _line("e.g., Account 1, Production, Testing...")
         layout.addWidget(ed_name)
         
-        # Project ID
+        # Project ID - Pre-fill with default
         layout.addWidget(_label("Project ID:"))
         ed_project_id = _line("9bb9b09b-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+        default_project = self.ed_project.text().strip() or DEFAULT_PROJECT_ID
+        ed_project_id.setText(default_project)
         layout.addWidget(ed_project_id)
         
         # Tokens
@@ -596,13 +682,11 @@ class SettingsPanelV3Compact(QWidget):
             'download_root': self.ed_local.text().strip(),
             'gdrive_folder_id': self.ed_gdrive.text().strip(),
             'google_workspace_oauth_token': self.ed_oauth.text().strip(),
-            'labs_tokens': self.w_labs.get_keys(),
-            'tokens': self.w_labs.get_keys(),
             'google_api_keys': self.w_google.get_keys(),
             'elevenlabs_api_keys': self.w_eleven.get_keys(),
             'openai_api_keys': self.w_openai.get_keys(),
             'default_voice_id': self.ed_voice.text().strip() or '3VnrjnYrskPMDsapTr8X',
-            'flow_project_id': self.ed_project.text().strip() or '87b19267-13d6-49cd-a7ed-db19a90c9339',
+            'flow_project_id': self.ed_project.text().strip() or DEFAULT_PROJECT_ID,
             'system_prompts_url': self.ed_sheets_url.text().strip(),  # Enhanced: Save prompts URL
         }
         
