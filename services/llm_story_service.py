@@ -272,57 +272,23 @@ def _validate_scene_uniqueness(scenes, similarity_threshold=0.8):
 
 def _enforce_character_consistency(scenes, character_bible):
     """
-    Enhance scene prompts with character visual identity details from character bible.
-    This ensures consistent character appearance across all scenes.
+    Store character visual identity details for reference.
+    Character consistency is now handled via the character_details field in build_prompt_json(),
+    not by modifying the scene prompts (which would cause TTS to read technical info).
+    
+    This function now only validates that character_bible data exists,
+    without modifying scene prompts.
     
     Args:
         scenes: List of scene dicts
         character_bible: List of character dicts with visual_identity field
     
     Returns:
-        Enhanced scenes with character details injected
+        Scenes unchanged (character consistency handled elsewhere)
     """
-    if not character_bible or not isinstance(character_bible, list):
-        return scenes
-    
-    # Build character lookup by name
-    char_lookup = {}
-    for char in character_bible:
-        name = char.get("name", "").strip()
-        visual_id = char.get("visual_identity", "").strip()
-        if name and visual_id:
-            char_lookup[name.lower()] = visual_id
-    
-    if not char_lookup:
-        return scenes
-    
-    # Enhance each scene with character visual details
-    for scene in scenes:
-        characters = scene.get("characters", [])
-        if not characters:
-            continue
-        
-        # Collect visual details for characters in this scene
-        visual_details = []
-        for char_name in characters:
-            char_key = char_name.lower()
-            if char_key in char_lookup:
-                visual_details.append(f"{char_name}: {char_lookup[char_key]}")
-        
-        # Prepend visual details to scene prompts
-        if visual_details:
-            visual_block = "CHARACTER CONSISTENCY: " + "; ".join(visual_details)
-            
-            # Enhance prompt_vi
-            prompt_vi = scene.get("prompt_vi", "")
-            if prompt_vi and visual_block not in prompt_vi:
-                scene["prompt_vi"] = f"{visual_block}. {prompt_vi}"
-            
-            # Enhance prompt_tgt
-            prompt_tgt = scene.get("prompt_tgt", "")
-            if prompt_tgt and visual_block not in prompt_tgt:
-                scene["prompt_tgt"] = f"{visual_block}. {prompt_tgt}"
-    
+    # BUG FIX: Do NOT modify prompt_vi or prompt_tgt
+    # Character consistency is handled by build_prompt_json() via character_details field
+    # Modifying prompts here causes "CHARACTER CONSISTENCY: ..." to appear in voiceover text
     return scenes
 
 def generate_script(idea, style, duration_seconds, provider='Gemini 2.5', api_key=None, output_lang='vi', domain=None, topic=None, voice_config=None):

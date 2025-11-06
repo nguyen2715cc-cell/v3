@@ -174,6 +174,8 @@ def build_prompt_json(scene_index:int, desc_vi:str, desc_tgt:str, lang_code:str,
     }
 
     # Part D: Enhanced character details with detailed bible
+    # BUG FIX: Build comprehensive character_details with visual_identity for ALL characters
+    # This ensures character consistency without polluting voiceover text
     character_details = "Primary talent remains visually consistent across all scenes."
     if enhanced_bible and hasattr(enhanced_bible, 'characters'):
         # Use detailed character bible
@@ -190,11 +192,37 @@ def build_prompt_json(scene_index:int, desc_vi:str, desc_tgt:str, lang_code:str,
             import sys
             print(f"[WARN] Character bible injection failed: {e}", file=sys.stderr)
             # Intentional fallback to basic character_details - continue processing
-    elif character_bible and isinstance(character_bible, list) and len(character_bible)>0:
-        # Use basic character bible
-        main = character_bible[0]
-        nm = main.get("name",""); role = main.get("role",""); key = main.get("key_trait",""); mot = main.get("motivation","")
-        character_details = f"{nm} ({role}) — trait: {key}; motivation: {mot}. Keep appearance and demeanor consistent."
+    elif character_bible and isinstance(character_bible, list) and len(character_bible) > 0:
+        # BUG FIX: Include ALL characters with visual_identity, not just first one
+        char_parts = []
+        for char in character_bible:
+            nm = char.get("name", "")
+            role = char.get("role", "")
+            visual = char.get("visual_identity", "")
+            key_trait = char.get("key_trait", "")
+            
+            if nm:
+                # Build character description with visual identity
+                parts = [f"{nm}"]
+                if role:
+                    parts.append(f"({role})")
+                if visual:
+                    parts.append(f"— Visual: {visual}")
+                if key_trait:
+                    parts.append(f"Trait: {key_trait}")
+                
+                char_parts.append(" ".join(parts))
+        
+        if char_parts:
+            character_details = "; ".join(char_parts) + ". Keep appearance and demeanor consistent across all scenes."
+        else:
+            # Fallback if no characters have proper data
+            main = character_bible[0]
+            nm = main.get("name", "")
+            role = main.get("role", "")
+            key = main.get("key_trait", "")
+            mot = main.get("motivation", "")
+            character_details = f"{nm} ({role}) — trait: {key}; motivation: {mot}. Keep appearance and demeanor consistent."
 
     # Enhanced: Match voiceover language with target language setting
     # Logic:
