@@ -1278,7 +1278,6 @@ class Text2VideoPane(QWidget):
             return  # Only show menu for failed scenes
         
         # Create context menu
-        from PyQt5.QtWidgets import QMenu
         menu = QMenu(self)
         
         retry_action = menu.addAction("🔄 Tạo lại video cho cảnh này")
