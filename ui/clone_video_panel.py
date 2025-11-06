@@ -56,6 +56,10 @@ class DownloadWorker(QThread):
             self.finished.emit(results)
             
         except Exception as e:
+            import traceback
+            # Log full traceback for debugging
+            traceback.print_exc()
+            # Emit user-friendly error message
             self.error.emit(str(e))
     
     def _log(self, msg):
@@ -360,9 +364,15 @@ class CloneVideoPanel(QWidget):
         
         num_scenes = self.scenes_slider.value()
         
-        # Extract language code
-        lang_text = self.language_combo.currentText()
-        language = lang_text.split('(')[1].rstrip(')')
+        # Extract language code using mapping
+        language_map = {
+            "Tiếng Việt (vi)": "vi",
+            "English (en)": "en",
+            "日本語 (ja)": "ja",
+            "한국어 (ko)": "ko",
+            "中文 (zh)": "zh"
+        }
+        language = language_map.get(self.language_combo.currentText(), "en")
         
         style = self.style_combo.currentText()
         
@@ -373,8 +383,8 @@ class CloneVideoPanel(QWidget):
             keys = get_all_keys('google')
             if keys:
                 api_key = keys[0]
-        except:
-            pass
+        except (ImportError, Exception) as e:
+            print(f"Warning: Could not load API key: {e}")
         
         # Start worker
         self.download_btn.setEnabled(False)

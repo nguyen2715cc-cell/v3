@@ -168,7 +168,10 @@ class VisionPromptGenerator:
             Base64 encoded image data
         """
         if not PIL_AVAILABLE:
-            raise RuntimeError("PIL/Pillow is required for image processing. Install it with: pip install Pillow")
+            raise RuntimeError(
+                "PIL/Pillow>=10.0.0 is required for image processing. "
+                "Install it with: pip install Pillow>=10.0.0"
+            )
         
         try:
             # Open and resize image if needed

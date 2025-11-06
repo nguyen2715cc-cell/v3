@@ -5,10 +5,12 @@ Download and analyze videos from TikTok/YouTube URLs
 """
 
 import os
+import shutil
 import tempfile
 import subprocess
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set
 import re
+from urllib.parse import urlparse
 
 
 class VideoCloneService:
@@ -22,6 +24,7 @@ class VideoCloneService:
             log_callback: Optional callback for logging
         """
         self.log = log_callback or print
+        self._temp_dirs: Set[str] = set()  # Track temp directories we create
     
     def download_video(
         self, 
@@ -44,9 +47,18 @@ class VideoCloneService:
             ValueError: If URL is invalid
             RuntimeError: If download fails
         """
-        # Validate URL
-        if not url or not url.startswith(('http://', 'https://')):
-            raise ValueError("Invalid URL format")
+        # Validate URL using urlparse
+        if not url:
+            raise ValueError("URL is empty")
+        
+        try:
+            parsed = urlparse(url)
+            if not parsed.scheme or not parsed.netloc:
+                raise ValueError("Invalid URL format")
+            if parsed.scheme not in ('http', 'https'):
+                raise ValueError("URL must use http or https protocol")
+        except Exception as e:
+            raise ValueError(f"Invalid URL: {e}")
         
         # Auto-detect platform if needed
         if platform == "auto":
@@ -56,6 +68,7 @@ class VideoCloneService:
         # Create output directory
         if output_dir is None:
             output_dir = tempfile.mkdtemp(prefix="video_clone_")
+            self._temp_dirs.add(output_dir)  # Track temp directory
         os.makedirs(output_dir, exist_ok=True)
         
         # Set output template
@@ -200,8 +213,15 @@ class VideoCloneService:
         if not url:
             return False, "", "URL is empty"
         
-        if not url.startswith(('http://', 'https://')):
-            return False, "", "URL must start with http:// or https://"
+        # Use urlparse for robust validation
+        try:
+            parsed = urlparse(url)
+            if not parsed.scheme or not parsed.netloc:
+                return False, "", "Invalid URL format"
+            if parsed.scheme not in ('http', 'https'):
+                return False, "", "URL must use http or https protocol"
+        except Exception as e:
+            return False, "", f"Invalid URL: {e}"
         
         platform = self._detect_platform(url)
         
@@ -218,14 +238,14 @@ class VideoCloneService:
             video_path: Path to video file (will delete parent dir if temp)
         """
         try:
-            import shutil
-            
-            # Check if this is a temp directory
+            # Check if parent directory is in our tracked temp dirs
             parent_dir = os.path.dirname(video_path)
-            if 'video_clone_' in parent_dir or 'scene_frames_' in parent_dir:
+            
+            if parent_dir in self._temp_dirs:
                 if os.path.exists(parent_dir):
                     shutil.rmtree(parent_dir, ignore_errors=True)
-                    self.log(f"[VideoClone] Cleaned up temp directory")
+                    self._temp_dirs.discard(parent_dir)
+                    self.log(f"[VideoClone] Cleaned up temp directory: {parent_dir}")
         except Exception as e:
             self.log(f"[VideoClone] Warning: Cleanup failed: {e}")
 

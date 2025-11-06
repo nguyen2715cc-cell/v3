@@ -5,6 +5,7 @@ Extract key frames from video using ffmpeg scene detection
 """
 
 import os
+import shutil
 import subprocess
 import tempfile
 from typing import List, Dict, Optional
@@ -84,7 +85,6 @@ class SceneDetector:
             
         except Exception as e:
             # Clean up temp directory on error
-            import shutil
             if os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir, ignore_errors=True)
             raise RuntimeError(f"Scene extraction failed: {e}")
