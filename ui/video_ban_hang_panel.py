@@ -1521,16 +1521,28 @@ class VideoBanHangPanel(QWidget):
             )
             return
 
-        # Get config and log language settings
+        # Get config and log language settings (BUG #3 fix: Enhanced validation)
         cfg = self._collect_cfg()
         speech_lang = cfg.get("speech_lang", "vi")
         voice_id = cfg.get("voice_id", "")
         
+        # Get language display name
+        from services.llm_story_service import LANGUAGE_NAMES
+        language_name = LANGUAGE_NAMES.get(speech_lang, speech_lang)
+        
         self._append_log("Bắt đầu tạo video...")
         self._append_log(f"✓ Sử dụng cache: {len(self.cache['scene_images'])} ảnh cảnh")
-        self._append_log(f"✓ Ngôn ngữ lời thoại: {speech_lang}")
+        self._append_log(f"✓ [LANGUAGE VALIDATION] Ngôn ngữ được chọn: {language_name} (code: {speech_lang})")
+        self._append_log(f"✓ [LANGUAGE VALIDATION] Voiceover sẽ được tạo bằng: {language_name}")
         if voice_id:
             self._append_log(f"✓ Voice ID: {voice_id}")
+        else:
+            self._append_log(f"⚠ Không có Voice ID - sẽ dùng giọng mặc định cho {language_name}")
+        
+        # Validate language setting is not default when user explicitly selected another language
+        selected_lang_display = self.cb_lang.currentText()
+        if selected_lang_display != "Tiếng Việt" and speech_lang == "vi":
+            self._append_log(f"⚠ [WARNING] Người dùng chọn '{selected_lang_display}' nhưng speech_lang = 'vi'")
         
         self.btn_video.setEnabled(False)
 

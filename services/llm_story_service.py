@@ -56,13 +56,20 @@ Mỗi nhân vật cần:
 - key_trait (1–2 từ): tính cách cốt lõi không đổi
 - motivation: động lực sâu thẳm
 - default_behavior: hành vi mặc định khi căng thẳng/suy nghĩ
-- visual_identity: đặc trưng nhận diện nhất quán
+- visual_identity: đặc trưng nhận diện NHẤT QUÁN - mô tả CHI TIẾT ngoại hình (tuổi, sắc tộc, chiều cao, thân hình, màu da, màu/kiểu tóc, màu mắt, đặc điểm khuôn mặt, quần áo mặc định). Phải giữ NGUYÊN trong tất cả các cảnh.
 - archetype: nguyên mẫu kể chuyện (ví dụ: Anh hùng, Người dẫn đường…)
 - fatal_flaw: khuyết điểm chí mạng
 - goal_external: mục tiêu bên ngoài
 - goal_internal: mục tiêu nội tâm
 
 QUÁN TRIỆT 2 — **Đồng nhất tuyến nhân vật**: hành động/lời thoại là hệ quả trực tiếp từ key_trait & motivation; thay đổi chỉ dần dần (Act II–III).
+
+QUÁN TRIỆT 3 — **CRITICAL: Scene Uniqueness (Tránh trùng lặp cảnh)**:
+- MỖI cảnh PHẢI có hành động/bối cảnh/hoạt động KHÁC BIỆT rõ ràng
+- KHÔNG được tạo 2 cảnh giống nhau hoặc quá tương tự (>80% trùng lặp)
+- Mỗi cảnh phải đóng góp nội dung MỚI cho câu chuyện
+- Ví dụ TỐT: Cảnh 1: Nhân vật ngồi bàn làm việc | Cảnh 2: Nhân vật đi bộ trong công viên | Cảnh 3: Nhân vật gặp khách hàng tại quán cafe
+- Ví dụ XẤU: Cảnh 1 & 2 đều là "nhân vật ngồi bàn làm việc" với mô tả giống nhau
 
 PHONG CÁCH:
 - **SHORT** (≤7'): 3–5 phân đoạn, nhịp nhanh/viral.
@@ -77,19 +84,19 @@ Trả về **JSON hợp lệ** theo schema EXACT (không thêm ký tự ngoài J
 {{
   "title_vi": "Tiêu đề ngắn (VI)",
   "title_tgt": "Title in {out_lang}",
-  "character_bible": [{{"name":"","role":"","key_trait":"","motivation":"","default_behavior":"","visual_identity":"","archetype":"","fatal_flaw":"","goal_external":"","goal_internal":""}}],
-  "character_bible_tgt": [{{"name":"","role":"","key_trait":"","motivation":"","default_behavior":"","visual_identity":"","archetype":"","fatal_flaw":"","goal_external":"","goal_internal":""}}],
+  "character_bible": [{{"name":"","role":"","key_trait":"","motivation":"","default_behavior":"","visual_identity":"MÔ TẢ CHI TIẾT: tuổi, sắc tộc, chiều cao, thân hình, màu da, màu/kiểu/độ dài tóc, màu/hình dáng mắt, mũi, môi, hàm, vết/nốt ruồi, quần áo mặc định - PHẢI GIỮ NGUYÊN qua tất cả cảnh","archetype":"","fatal_flaw":"","goal_external":"","goal_internal":""}}],
+  "character_bible_tgt": [{{"name":"","role":"","key_trait":"","motivation":"","default_behavior":"","visual_identity":"DETAILED: age, ethnicity, height, build, skin tone, hair color/style/length, eye color/shape, nose, lips, jawline, marks/moles, default clothing - MUST STAY CONSISTENT across ALL scenes","archetype":"","fatal_flaw":"","goal_external":"","goal_internal":""}}],
   "outline_vi": "Dàn ý tóm tắt (nêu rõ chế độ {mode}, sự kiện chính theo Hồi/Phân đoạn)",
   "outline_tgt": "Outline in {out_lang}",
   "screenplay_vi": "Screenplay (SCENE/ACTION/DIALOGUE) — tuân thủ Character Bible & chế độ {mode}, có Hook & Twist",
   "screenplay_tgt": "Screenplay in {out_lang}",
   "scenes": [
     {{
-      "prompt_vi":"Mô tả ngắn (1–2 câu) bám Character Bible cho cảnh",
-      "prompt_tgt":"{out_lang} version",
+      "prompt_vi":"Mô tả KHÁC BIỆT cho cảnh này (hành động/bối cảnh/hoạt động RIÊNG BIỆT, KHÔNG trùng với cảnh khác), bám Character Bible để nhân vật giữ nguyên ngoại hình",
+      "prompt_tgt":"UNIQUE description for this scene (DISTINCT action/setting/activity, NO duplication with other scenes), follow Character Bible to maintain exact character appearance",
       "duration": 8,
       "characters": ["Tên nhân vật xuất hiện"],
-      "location": "Địa điểm",
+      "location": "Địa điểm KHÁC BIỆT cho cảnh này",
       "dialogues": [
         {{"speaker":"Tên","text_vi":"Câu thoại VI","text_tgt":"Line in {out_lang}"}}
       ]
@@ -203,6 +210,48 @@ def _call_gemini(prompt, api_key, model="gemini-2.5-flash"):
     else:
         raise RuntimeError("Gemini API failed with unknown error")
 
+def _validate_scene_uniqueness(scenes, threshold=0.8):
+    """
+    Validate that scenes are sufficiently unique (not duplicates).
+    
+    Args:
+        scenes: List of scene dicts with prompt_vi/prompt_tgt
+        threshold: Similarity threshold (0.8 = 80% similar is considered duplicate)
+    
+    Returns:
+        tuple: (is_valid, duplicate_pairs) where duplicate_pairs is list of (idx1, idx2, similarity)
+    """
+    if len(scenes) < 2:
+        return True, []
+    
+    duplicates = []
+    
+    for i in range(len(scenes)):
+        for j in range(i + 1, len(scenes)):
+            # Compare prompts (use target language if available, otherwise vi)
+            prompt_i = (scenes[i].get('prompt_tgt') or scenes[i].get('prompt_vi', '')).lower()
+            prompt_j = (scenes[j].get('prompt_tgt') or scenes[j].get('prompt_vi', '')).lower()
+            
+            if not prompt_i or not prompt_j:
+                continue
+            
+            # Simple word-based similarity check
+            words_i = set(prompt_i.split())
+            words_j = set(prompt_j.split())
+            
+            if not words_i or not words_j:
+                continue
+            
+            # Jaccard similarity: intersection / union
+            intersection = len(words_i & words_j)
+            union = len(words_i | words_j)
+            similarity = intersection / union if union > 0 else 0
+            
+            if similarity >= threshold:
+                duplicates.append((i, j, similarity))
+    
+    return len(duplicates) == 0, duplicates
+
 def generate_script(idea, style, duration_seconds, provider='Gemini 2.5', api_key=None, output_lang='vi', domain=None, topic=None, voice_config=None):
     """
     Generate video script with optional domain/topic expertise and voice settings
@@ -251,6 +300,16 @@ def generate_script(idea, style, duration_seconds, provider='Gemini 2.5', api_ke
         # FIXED: Use gpt-4-turbo instead of gpt-5
         res=_call_openai(prompt,key,"gpt-4-turbo")
     if "scenes" not in res: raise RuntimeError("LLM không trả về đúng schema.")
+    
+    # Validate scene uniqueness (BUG #1 fix)
+    scenes = res.get("scenes", [])
+    is_valid, duplicates = _validate_scene_uniqueness(scenes, threshold=0.8)
+    if not is_valid:
+        # Log warning about duplicates but don't fail - let user decide
+        dup_msg = "; ".join([f"Scene {i+1} & {j+1} ({sim:.0%} similar)" for i, j, sim in duplicates])
+        print(f"[WARN] Duplicate scenes detected: {dup_msg}")
+        # Could optionally add to result for UI display:
+        # res["_warnings"] = [f"Duplicate scenes detected: {dup_msg}"]
     
     # Store voice configuration in result for consistency
     if voice_config:

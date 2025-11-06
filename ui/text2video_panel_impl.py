@@ -166,9 +166,9 @@ def build_prompt_json(scene_index:int, desc_vi:str, desc_tgt:str, lang_code:str,
         location_lock = f"CRITICAL: All scenes must be in {location_context}. Do NOT change background, setting, or environment. Maintain exact location consistency across all scenes."
     
     hard_locks = {
-        "identity": "Keep the same face, body, and identity across scenes.",
-        "wardrobe": "Outfit consistency is required. Do NOT change outfit, color, or add accessories without instruction.",
-        "hair_makeup": "Keep hair and makeup consistent; do NOT change length or color unless explicitly instructed.",
+        "identity": "CRITICAL: Keep the EXACT SAME face, facial features, body type, and identity across ALL scenes. Character must be visually identical in every scene.",
+        "wardrobe": "CRITICAL: Outfit consistency is MANDATORY. Do NOT change outfit, color, style, or add/remove accessories unless explicitly instructed. Same clothes in all scenes.",
+        "hair_makeup": "CRITICAL: Keep hair color, length, style, and texture IDENTICAL. Keep makeup IDENTICAL. Do NOT change hair or makeup unless explicitly instructed.",
         "location": location_lock
     }
 
@@ -183,7 +183,7 @@ def build_prompt_json(scene_index:int, desc_vi:str, desc_tgt:str, lang_code:str,
             # Extract just the character block for character_details field
             if '\n\n' in desc_with_char:
                 char_block = desc_with_char.split('\n\n')[0]
-                character_details = char_block
+                character_details = f"CRITICAL: Maintain exact character appearance across ALL scenes.\n{char_block}"
         except Exception as e:
             # Log the error for debugging but continue with fallback
             import sys
@@ -193,7 +193,8 @@ def build_prompt_json(scene_index:int, desc_vi:str, desc_tgt:str, lang_code:str,
         # Use basic character bible
         main = character_bible[0]
         nm = main.get("name",""); role = main.get("role",""); key = main.get("key_trait",""); mot = main.get("motivation","")
-        character_details = f"{nm} ({role}) — trait: {key}; motivation: {mot}. Keep appearance and demeanor consistent."
+        visual = main.get("visual_identity","")
+        character_details = f"CRITICAL: {nm} ({role}) must maintain EXACT appearance across ALL scenes.\nVisual Identity: {visual}\nTrait: {key}; Motivation: {mot}.\nDo NOT change hair color, facial features, clothing, or any visual characteristics between scenes."
 
     # Enhanced: Match voiceover language with target language setting
     # Logic:
@@ -251,8 +252,14 @@ def build_prompt_json(scene_index:int, desc_vi:str, desc_tgt:str, lang_code:str,
     elif expressiveness > 0.7:
         expressiveness_description = "highly expressive, dynamic delivery"
     
+    # Get language display name for clarity
+    from services.llm_story_service import LANGUAGE_NAMES
+    language_name = LANGUAGE_NAMES.get(lang_code, lang_code)
+    
     voiceover_config = {
         "language": lang_code or "vi",
+        "language_name": language_name,
+        "language_instruction": f"CRITICAL: Generate voiceover in {language_name}, NOT in English or any other language. All speech must be in {language_name}.",
         "tts_provider": tts_provider or "google",
         "voice_id": voice_id or "",
         "voice_name": voice_name or "",
@@ -271,6 +278,10 @@ def build_prompt_json(scene_index:int, desc_vi:str, desc_tgt:str, lang_code:str,
         },
         "elevenlabs_settings": elevenlabs_settings
     }
+    
+    # BUG #3 FIX: Add language validation logging
+    import sys
+    print(f"[LANGUAGE TRACKING] Scene {scene_index}: lang_code={lang_code}, language_name={language_name}, tts_provider={tts_provider or 'google'}, voice_id={voice_id or 'default'}", file=sys.stderr)
     
     # Part F: Build domain context
     domain_context = {}
@@ -344,10 +355,12 @@ def build_prompt_json(scene_index:int, desc_vi:str, desc_tgt:str, lang_code:str,
             "on_screen_text": []
         },
         "negatives": [
-            "Do NOT change character identity, outfit, or location without instruction.",
+            "Do NOT change character identity, outfit, hair, or facial features between scenes.",
+            "Do NOT change character appearance - maintain exact same face, hair color, clothing across ALL scenes.",
             "Avoid jarring cuts or random background swaps.",
             "No brand logos unless present in references.",
-            "No unrealistic X-ray views; use graphic overlays only."
+            "No unrealistic X-ray views; use graphic overlays only.",
+            f"Do NOT generate voiceover in English or other languages - MUST be in {language_name}."
         ],
         "generation": { 
             "seed": __import__("random").randint(0, 2**31-1), 
