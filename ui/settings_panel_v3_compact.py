@@ -243,40 +243,10 @@ class SettingsPanelV3Compact(QWidget):
         openai_section.add_content_widget(self.w_openai)
         accordion_grid.addWidget(openai_section, 1, 1)
         
-        api_layout.addLayout(accordion_grid)
+        # === MULTI-ACCOUNT MANAGEMENT (ISSUE #4) - Now as AccordionSection ===
+        multi_acc_section = AccordionSection("🔑 Multi-Account Management")
         
-        # Expand/Collapse buttons
-        toggle_row = QHBoxLayout()
-        toggle_row.setSpacing(8)
-        
-        btn_expand = CompactButton("📂 Expand All")
-        btn_expand.setObjectName("btn_expand")
-        btn_expand.clicked.connect(lambda: [
-            google_section.set_expanded(True),
-            eleven_section.set_expanded(True),
-            openai_section.set_expanded(True)
-        ])
-        toggle_row.addWidget(btn_expand)
-        
-        btn_collapse = CompactButton("📁 Collapse All")
-        btn_collapse.setObjectName("btn_collapse")
-        btn_collapse.clicked.connect(lambda: [
-            google_section.set_expanded(False),
-            eleven_section.set_expanded(False),
-            openai_section.set_expanded(False)
-        ])
-        toggle_row.addWidget(btn_collapse)
-        toggle_row.addStretch()
-        
-        api_layout.addLayout(toggle_row)
-        root.addWidget(api_group)
-        
-        # === MULTI-ACCOUNT MANAGEMENT (ISSUE #4) ===
-        multi_acc_group = QGroupBox("🔑 Multi-Account Management")
-        multi_acc_group.setFont(FONT_H2)
-        multi_acc_layout = QVBoxLayout(multi_acc_group)
-        multi_acc_layout.setSpacing(6)
-        
+        # Add hint
         hint2 = QLabel(
             "💡 Tip: Use multiple accounts to avoid rate limits and increase processing speed!\n"
             "Each account will process scenes in parallel."
@@ -284,9 +254,9 @@ class SettingsPanelV3Compact(QWidget):
         hint2.setFont(FONT_SMALL)
         hint2.setWordWrap(True)
         hint2.setStyleSheet("color: #666; font-size: 11px; padding: 8px;")
-        multi_acc_layout.addWidget(hint2)
+        multi_acc_section.add_content_widget(hint2)
         
-        # Account list widget
+        # Account table
         self.accounts_table = QTableWidget()
         self.accounts_table.setColumnCount(4)
         self.accounts_table.setHorizontalHeaderLabels(["Enabled", "Account Name", "Project ID", "Tokens"])
@@ -314,9 +284,9 @@ class SettingsPanelV3Compact(QWidget):
         # Load accounts from config
         self._load_accounts_table()
         
-        multi_acc_layout.addWidget(self.accounts_table)
+        multi_acc_section.add_content_widget(self.accounts_table)
         
-        # Default Project ID for new accounts
+        # Default Project ID
         proj_row = QHBoxLayout()
         proj_row.setSpacing(8)
         proj_label = QLabel("Default Project ID:")
@@ -335,7 +305,7 @@ class SettingsPanelV3Compact(QWidget):
         proj_info.setStyleSheet("color: #666; font-size: 10px;")
         proj_row.addWidget(proj_info)
         
-        multi_acc_layout.addLayout(proj_row)
+        multi_acc_section.add_content_layout(proj_row)
         
         # Account management buttons
         acc_buttons = QHBoxLayout()
@@ -361,9 +331,40 @@ class SettingsPanelV3Compact(QWidget):
         self.lb_account_status.setStyleSheet("color: #4CAF50; font-weight: bold;")
         acc_buttons.addWidget(self.lb_account_status)
         
-        multi_acc_layout.addLayout(acc_buttons)
+        multi_acc_section.add_content_layout(acc_buttons)
         
-        root.addWidget(multi_acc_group)
+        # Add Multi-Account section to grid (row 2, spanning both columns)
+        accordion_grid.addWidget(multi_acc_section, 2, 0, 1, 2)
+        
+        api_layout.addLayout(accordion_grid)
+        
+        # Expand/Collapse buttons
+        toggle_row = QHBoxLayout()
+        toggle_row.setSpacing(8)
+        
+        btn_expand = CompactButton("📂 Expand All")
+        btn_expand.setObjectName("btn_expand")
+        btn_expand.clicked.connect(lambda: [
+            google_section.set_expanded(True),
+            eleven_section.set_expanded(True),
+            openai_section.set_expanded(True),
+            multi_acc_section.set_expanded(True)
+        ])
+        toggle_row.addWidget(btn_expand)
+        
+        btn_collapse = CompactButton("📁 Collapse All")
+        btn_collapse.setObjectName("btn_collapse")
+        btn_collapse.clicked.connect(lambda: [
+            google_section.set_expanded(False),
+            eleven_section.set_expanded(False),
+            openai_section.set_expanded(False),
+            multi_acc_section.set_expanded(False)
+        ])
+        toggle_row.addWidget(btn_collapse)
+        toggle_row.addStretch()
+        
+        api_layout.addLayout(toggle_row)
+        root.addWidget(api_group)
         
         # === STORAGE - ONE LINE ===
         storage_group = QGroupBox("💾 Storage Settings")
