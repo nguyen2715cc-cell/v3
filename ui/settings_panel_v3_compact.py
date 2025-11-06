@@ -9,15 +9,18 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QLineEdit, QPushButton, QRadioButton,
-    QGroupBox, QFileDialog, QScrollArea, QFrame, QSizePolicy
+    QGroupBox, QFileDialog, QScrollArea, QFrame, QSizePolicy,
+    QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox,
+    QDialog, QDialogButtonBox, QTextEdit, QMessageBox, QApplication
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 
 from ui.widgets.accordion import Accordion, AccordionSection
 from ui.widgets.compact_button import CompactButton
 from ui.widgets.key_list_v2 import KeyListV2
 from utils import config as cfg
 from utils.version import get_version
+from services.account_manager import get_account_manager, LabsAccount
 
 # Typography
 FONT_H2 = QFont("Segoe UI", 14, QFont.Bold)
@@ -377,8 +380,6 @@ class SettingsPanelV3Compact(QWidget):
     
     def _load_accounts_table(self):
         """Load accounts from config into table"""
-        from services.account_manager import get_account_manager
-        
         account_mgr = get_account_manager()
         accounts = account_mgr.get_all_accounts()
         
@@ -411,8 +412,6 @@ class SettingsPanelV3Compact(QWidget):
     
     def _toggle_account(self, row, state):
         """Toggle account enabled state"""
-        from services.account_manager import get_account_manager
-        
         account_mgr = get_account_manager()
         if state == Qt.Checked:
             account_mgr.enable_account(row)
@@ -442,7 +441,6 @@ class SettingsPanelV3Compact(QWidget):
         
         # Tokens
         layout.addWidget(_label("OAuth Tokens (one per line):"))
-        from PyQt5.QtWidgets import QTextEdit
         ed_tokens = QTextEdit()
         ed_tokens.setPlaceholderText("Paste OAuth tokens here, one per line")
         ed_tokens.setMaximumHeight(120)
@@ -465,15 +463,13 @@ class SettingsPanelV3Compact(QWidget):
         layout.addWidget(buttons)
         
         if dialog.exec_() == QDialog.Accepted:
-            from services.account_manager import get_account_manager, LabsAccount
-            
             name = ed_name.text().strip()
             project_id = ed_project_id.text().strip()
             tokens_text = ed_tokens.toPlainText().strip()
             tokens = [line.strip() for line in tokens_text.split('\n') if line.strip()]
             
             if not name or not project_id or not tokens:
-                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "Invalid Input", "Please fill all fields")
                 QMessageBox.warning(self, "Invalid Input", "Please fill all fields")
                 return
             
@@ -487,14 +483,11 @@ class SettingsPanelV3Compact(QWidget):
     
     def _edit_account(self):
         """Edit selected account"""
-        from PyQt5.QtWidgets import QMessageBox, QDialog, QDialogButtonBox, QTextEdit
-        
         row = self.accounts_table.currentRow()
         if row < 0:
             QMessageBox.warning(self, "No Selection", "Please select an account to edit")
             return
         
-        from services.account_manager import get_account_manager
         account_mgr = get_account_manager()
         account = account_mgr.get_account(row)
         
@@ -544,8 +537,6 @@ class SettingsPanelV3Compact(QWidget):
         layout.addWidget(buttons)
         
         if dialog.exec_() == QDialog.Accepted:
-            from services.account_manager import LabsAccount
-            
             name = ed_name.text().strip()
             project_id = ed_project_id.text().strip()
             tokens_text = ed_tokens.toPlainText().strip()
@@ -565,14 +556,11 @@ class SettingsPanelV3Compact(QWidget):
     
     def _remove_account(self):
         """Remove selected account"""
-        from PyQt5.QtWidgets import QMessageBox
-        
         row = self.accounts_table.currentRow()
         if row < 0:
             QMessageBox.warning(self, "No Selection", "Please select an account to remove")
             return
         
-        from services.account_manager import get_account_manager
         account_mgr = get_account_manager()
         account = account_mgr.get_account(row)
         
@@ -630,12 +618,9 @@ class SettingsPanelV3Compact(QWidget):
         cfg.save(st)
         self.lb_saved.setText(f'✓ Saved at {_ts()}')
         
-        from PyQt5.QtCore import QTimer
         QTimer.singleShot(5000, lambda: self.lb_saved.setText(''))
     
     def _update_system_prompts(self):
-        from PyQt5.QtWidgets import QMessageBox, QApplication
-        
         self.lb_prompts_status.setText('⏳ Updating...')
         self.btn_update_prompts.setEnabled(False)
         QApplication.processEvents()

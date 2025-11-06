@@ -205,8 +205,17 @@ def _call_gemini(prompt, api_key, model="gemini-2.5-flash"):
 
 def _calculate_text_similarity(text1, text2):
     """
-    Calculate similarity between two texts using simple token-based approach.
-    Returns similarity score between 0.0 and 1.0.
+    Calculate similarity between two texts using Jaccard similarity algorithm.
+    
+    Jaccard similarity = |intersection| / |union| of word sets
+    Returns a value between 0.0 (completely different) and 1.0 (identical).
+    
+    Args:
+        text1: First text string
+        text2: Second text string
+    
+    Returns:
+        float: Similarity score between 0.0 and 1.0
     """
     if not text1 or not text2:
         return 0.0

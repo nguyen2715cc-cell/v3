@@ -11,6 +11,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 
 from services.google.labs_flow_client import DEFAULT_PROJECT_ID, LabsFlowClient
 from services.utils.video_downloader import VideoDownloader
+from services.account_manager import get_account_manager
 from utils import config as cfg
 from utils.filename_sanitizer import sanitize_project_name, sanitize_filename
 
@@ -492,7 +493,6 @@ class _Worker(QObject):
         st = cfg.load()
         
         # ISSUE #4 FIX: Multi-account support
-        from services.account_manager import get_account_manager
         account_mgr = get_account_manager()
         
         # Check if multi-account mode is enabled
@@ -512,6 +512,9 @@ class _Worker(QObject):
         thumbs_dir = os.path.join(dir_videos, "thumbs")
 
         jobs = []
+        # Cache for LabsClient instances by project_id to avoid redundant creation
+        client_cache = {}
+        
         # PR#5: Batch generation - make one call per scene with copies parameter (not N calls)
         for scene_idx, scene in enumerate(p["scenes"], start=1):
             ratio = scene["aspect"]
@@ -529,8 +532,10 @@ class _Worker(QObject):
                     tokens = st.get("tokens") or []
                     project_id = st.get("default_project_id") or DEFAULT_PROJECT_ID
             
-            # Create client for this scene's account
-            client = LabsClient(tokens, on_event=None)
+            # Create or reuse client for this project_id
+            if project_id not in client_cache:
+                client_cache[project_id] = LabsClient(tokens, on_event=None)
+            client = client_cache[project_id]
 
             # Single API call with copies parameter (instead of N calls)
             body = {"prompt": scene["prompt"], "copies": copies, "model": model_key, "aspect_ratio": ratio}
