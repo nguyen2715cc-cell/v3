@@ -185,13 +185,40 @@ class StoryboardView(QWidget):
         
         vids = state_dict.get('videos', {})
         if vids:
-            completed = sum(1 for v in vids.values() if v.get('status') == 'completed')
+            completed = sum(1 for v in vids.values() if v.get('status') in ('DOWNLOADED', 'COMPLETED', 'UPSCALED_4K'))
+            failed = sum(1 for v in vids.values() if v.get('status') in ('FAILED', 'ERROR', 'FAILED_START', 'DONE_NO_URL', 'DOWNLOAD_FAILED'))
             total = len(vids)
-            status_label = QLabel(f"🎥 {completed}/{total} videos")
+            
+            # Status label with color coding
+            if failed > 0:
+                status_label = QLabel(f"❌ {failed} failed, {completed}/{total} OK")
+                status_label.setStyleSheet("color: #E53935; font-weight: bold;")
+            else:
+                status_label = QLabel(f"🎥 {completed}/{total} videos")
+                status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+            
             status_label.setAlignment(Qt.AlignCenter)
-            status_label.setFont(QFont("Segoe UI", 10, QFont.Bold))  # Enhanced: Size 10, Bold
-            status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+            status_label.setFont(QFont("Segoe UI", 10, QFont.Bold))
             card_layout.addWidget(status_label)
+            
+            # BUG FIX #3: Add retry button for failed videos
+            if failed > 0:
+                retry_btn = QPushButton(f"🔄 Retry ({failed})")
+                retry_btn.setMinimumHeight(28)
+                retry_btn.setStyleSheet("""
+                    QPushButton {
+                        background: #FF9800;
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        font-weight: bold;
+                        font-size: 11px;
+                        padding: 4px 8px;
+                    }
+                    QPushButton:hover { background: #F57C00; }
+                """)
+                retry_btn.clicked.connect(lambda checked, sn=scene_num: self.parent()._retry_failed_scene(sn))
+                card_layout.addWidget(retry_btn)
         
         card.scene_num = scene_num
         card.mousePressEvent = lambda e: self.scene_clicked.emit(scene_num)
@@ -1169,7 +1196,7 @@ class Text2VideoPanelV5(QWidget):
         self._run_in_thread("video", payload)
     
     def _render_card_text(self, scene:int):
-        """Render card text with plain text formatting - Fixed Issue #3"""
+        """Render card text with plain text formatting - BUG FIX #3: Show failed count"""
         st = self._cards_state.get(scene, {})
         vi = st.get('vi','').strip()
         tgt = st.get('tgt','').strip()
@@ -1186,11 +1213,23 @@ class Text2VideoPanelV5(QWidget):
                 prompt += '...'
             lines.append(prompt)
         
-        # Videos
+        # Videos - BUG FIX #3: Show failed count
         vids = st.get('videos', {})
         if vids:
             lines.append('')
-            lines.append('🎥 VIDEO:')
+            
+            # Count statuses
+            failed = sum(1 for info in vids.values() 
+                        if info.get('status') in ('FAILED', 'ERROR', 'FAILED_START', 'DONE_NO_URL', 'DOWNLOAD_FAILED'))
+            completed = sum(1 for info in vids.values() 
+                           if info.get('status') in ('DOWNLOADED', 'COMPLETED', 'UPSCALED_4K'))
+            
+            # Status summary
+            if failed > 0:
+                lines.append(f'🎥 VIDEO: {completed} OK, ❌ {failed} FAILED')
+            else:
+                lines.append('🎥 VIDEO:')
+            
             for copy, info in sorted(vids.items()):
                 status = info.get('status', '?')
                 tag = f'  #{copy}: {status}'
@@ -1200,6 +1239,11 @@ class Text2VideoPanelV5(QWidget):
                 
                 if info.get('path'):
                     lines.append(f'  📥 {os.path.basename(info["path"])}')
+            
+            # BUG FIX #3: Show retry hint
+            if failed > 0:
+                lines.append('')
+                lines.append(f'💡 Double-click or use Storyboard view to retry')
         
         return '\n'.join(lines)
         
@@ -1971,4 +2015,118 @@ class Text2VideoPanelV5(QWidget):
                 )
                 dlg.exec_()
             except ImportError:
-                self._append_log("[WARN] PromptViewer not available")
+                self._append_log("[WARN] PromptViewer not available")    
+    def _retry_failed_scene(self, scene_num):
+        """BUG FIX #3: Retry failed videos for a specific scene"""
+        if scene_num < 1 or scene_num > self.table.rowCount():
+            self._append_log(f"[ERR] Invalid scene number: {scene_num}")
+            return
+        
+        st = self._cards_state.get(scene_num, {})
+        vids = st.get('videos', {})
+        
+        # Count failed videos
+        failed_copies = [copy_num for copy_num, info in vids.items() 
+                        if info.get('status') in ('FAILED', 'ERROR', 'FAILED_START', 'DONE_NO_URL', 'DOWNLOAD_FAILED')]
+        
+        if not failed_copies:
+            self._append_log(f"[INFO] Cảnh {scene_num}: Không có video lỗi để retry")
+            return
+        
+        reply = QMessageBox.question(
+            self, 'Xác nhận retry',
+            f'Retry {len(failed_copies)} video lỗi của cảnh {scene_num}?',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        
+        if reply == QMessageBox.No:
+            return
+        
+        self._append_log(f"[INFO] Đang retry {len(failed_copies)} video lỗi của cảnh {scene_num}...")
+        
+        # Get scene data from table
+        row = scene_num - 1
+        vi = self.table.item(row, 1).text() if self.table.item(row, 1) else ""
+        tgt = self.table.item(row, 2).text() if self.table.item(row, 2) else vi
+        
+        lang_code = self.cb_out_lang.currentData()
+        ratio_key = self.cb_ratio.currentText()
+        ratio = _ASPECT_MAP.get(ratio_key, "VIDEO_ASPECT_RATIO_LANDSCAPE")
+        style = self.cb_style.currentText()
+        
+        character_bible_basic = (
+            self._script_data.get("character_bible", [])
+            if self._script_data else []
+        )
+        voice_settings = self.get_voice_settings()
+        
+        location_ctx = None
+        if self._script_data and "scenes" in self._script_data:
+            scene_list = self._script_data["scenes"]
+            if row < len(scene_list) and extract_location_context:
+                location_ctx = extract_location_context(scene_list[row])
+        
+        # Build prompt JSON for retry
+        if build_prompt_json:
+            tts_provider = self.cb_tts_provider.currentData()
+            voice_id = self.ed_custom_voice.text().strip() or self.cb_voice.currentData()
+            voice_name = self.cb_voice.currentText() if not self.ed_custom_voice.text().strip() else ""
+            domain = self.cb_domain.currentData() or None
+            topic = self.cb_topic.currentData() or None
+            quality_text = self.cb_quality.currentText() if self.cb_quality.isVisible() else None
+            
+            j = build_prompt_json(
+                scene_num, vi, tgt, lang_code, ratio_key, style,
+                character_bible=character_bible_basic,
+                enhanced_bible=self._character_bible,
+                voice_settings=voice_settings,
+                location_context=location_ctx,
+                tts_provider=tts_provider,
+                voice_id=voice_id,
+                voice_name=voice_name,
+                domain=domain,
+                topic=topic,
+                quality=quality_text
+            )
+            
+            scenes = [{
+                "prompt": json.dumps(j, ensure_ascii=False, indent=2),
+                "aspect": ratio
+            }]
+        else:
+            self._append_log("[ERR] build_prompt_json not available")
+            return
+        
+        model_display = self.cb_model.currentText()
+        model_key = get_model_key_from_display(model_display) if get_model_key_from_display else model_display
+        
+        payload = dict(
+            scenes=scenes,
+            copies=len(failed_copies),  # Retry only failed count
+            model_key=model_key,
+            title=self._title,
+            dir_videos=self._ctx.get("dir_videos", ""),
+            upscale_4k=self.cb_upscale.isChecked(),
+            auto_download=self.cb_auto_download.isChecked(),
+            quality=self.cb_quality.currentText()
+        )
+        
+        if not payload["dir_videos"]:
+            self._append_log("[ERR] Không tìm thấy thư mục video")
+            return
+        
+        self._append_log(f"[INFO] Bắt đầu retry {len(failed_copies)} video cho cảnh {scene_num}...")
+        self._run_in_thread("video", payload)
+    
+    def _play_video(self, video_path):
+        """Play video file using system default player"""
+        if not video_path or not os.path.exists(video_path):
+            self._append_log(f"[WARN] Video không tồn tại: {video_path}")
+            return
+        
+        try:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(video_path))
+            self._append_log(f"[INFO] Đang mở video: {os.path.basename(video_path)}")
+        except Exception as e:
+            self._append_log(f"[ERR] Không thể mở video: {e}")
