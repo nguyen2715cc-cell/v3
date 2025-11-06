@@ -125,7 +125,7 @@ class VideoCloneService:
     
     def _detect_platform(self, url: str) -> str:
         """
-        Auto-detect platform from URL
+        Auto-detect platform from URL using hostname parsing
         
         Args:
             url: Video URL
@@ -133,13 +133,25 @@ class VideoCloneService:
         Returns:
             Platform name ('tiktok', 'youtube', or 'unknown')
         """
-        url_lower = url.lower()
-        
-        if 'tiktok.com' in url_lower or 'vm.tiktok.com' in url_lower:
-            return 'tiktok'
-        elif 'youtube.com' in url_lower or 'youtu.be' in url_lower:
-            return 'youtube'
-        else:
+        try:
+            parsed = urlparse(url)
+            hostname = parsed.netloc.lower()
+            
+            # Remove 'www.' prefix if present
+            if hostname.startswith('www.'):
+                hostname = hostname[4:]
+            
+            # Check for TikTok domains
+            if hostname == 'tiktok.com' or hostname.endswith('.tiktok.com'):
+                return 'tiktok'
+            
+            # Check for YouTube domains
+            if hostname in ('youtube.com', 'youtu.be') or hostname.endswith('.youtube.com'):
+                return 'youtube'
+            
+            return 'unknown'
+            
+        except Exception:
             return 'unknown'
     
     def analyze_video(
