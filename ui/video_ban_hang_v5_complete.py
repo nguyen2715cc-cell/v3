@@ -412,26 +412,30 @@ class ImageGenerationWorker(QThread):
                         error = f"Whisk: {str(e)[:50]}"
                 
                 # Fallback to Gemini/Imagen
-                if img_data is None and image_gen_service:
+                if img_data is None:
                     try:
-                        img_data_url = image_gen_service.generate_image_with_rate_limit(
-                            text=prompt,
-                            api_keys=api_keys,
-                            model=model,
-                            aspect_ratio=aspect_ratio,
-                            delay_before=10,  # 10s delay per thread
-                            logger=None,
-                        )
-                        
-                        if img_data_url and convert_to_bytes:
-                            img_data, err = convert_to_bytes(img_data_url)
-                            if not img_data:
-                                error = err
+                        # Import in thread scope to ensure it's available
+                        if image_gen_service:
+                            img_data_url = image_gen_service.generate_image_with_rate_limit(
+                                text=prompt,
+                                api_keys=api_keys,
+                                model=model,
+                                aspect_ratio=aspect_ratio,
+                                delay_before=10,  # 10s delay per thread
+                                logger=None,
+                            )
+                            
+                            if img_data_url:
+                                # Import convert_to_bytes in thread scope
+                                if convert_to_bytes:
+                                    img_data, err = convert_to_bytes(img_data_url)
+                                    if not img_data:
+                                        error = err
                     except Exception as e:
                         error = f"Gemini: {str(e)[:50]}"
                 
-                # Queue result
-                results_queue.put((scene.get('index'), img_data, error))
+                # Queue result - use scene_idx from batch tuple, not scene.get('index')
+                results_queue.put((scene_idx, img_data, error))
                 
         except Exception as e:
             # Log thread error but don't crash
