@@ -15,6 +15,30 @@ import json
 import argparse
 import requests
 from typing import Optional
+from urllib.parse import urlparse
+
+
+# Trusted Google domains for video URLs
+TRUSTED_GOOGLE_DOMAINS = [
+    'generativelanguage.googleapis.com',
+    'aisandbox-pa.googleapis.com',
+    'storage.googleapis.com',
+    'labs.google',
+]
+
+
+def is_trusted_google_domain(url: str) -> bool:
+    """Check if URL is from a trusted Google domain"""
+    try:
+        parsed = urlparse(url)
+        domain = parsed.netloc.lower()
+        # Check exact match or subdomain of trusted domains
+        for trusted in TRUSTED_GOOGLE_DOMAINS:
+            if domain == trusted or domain.endswith('.' + trusted):
+                return True
+        return False
+    except Exception:
+        return False
 
 
 def verify_video_is_real(video_path: str, operation_name: Optional[str] = None, 
@@ -126,16 +150,22 @@ def verify_video_is_real(video_path: str, operation_name: Optional[str] = None,
                             break
                     
                     if video_url:
-                        results['video_url_domain'] = video_url.split('/')[2] if '://' in video_url else None
+                        # Use urlparse for robust domain extraction
+                        try:
+                            parsed_url = urlparse(video_url)
+                            results['video_url_domain'] = parsed_url.netloc
+                        except Exception:
+                            results['video_url_domain'] = None
+                        
                         print(f"✓ Video URL found: {video_url[:80]}...")
                         print(f"  Domain: {results['video_url_domain']}")
                         
-                        # Verify it's a Google domain
-                        if results['video_url_domain'] and 'google' in results['video_url_domain'].lower():
-                            print(f"✓ URL is from Google domain")
+                        # Verify it's a trusted Google domain
+                        if is_trusted_google_domain(video_url):
+                            print(f"✓ URL is from trusted Google domain")
                         else:
-                            print(f"⚠ URL is NOT from Google domain (suspicious!)")
-                            results['errors'].append("Video URL is not from Google domain")
+                            print(f"⚠ URL is NOT from trusted Google domain (suspicious!)")
+                            results['errors'].append("Video URL is not from trusted Google domain")
                     else:
                         print(f"✗ No video URL found in operation response")
                         results['errors'].append("No video URL in operation")

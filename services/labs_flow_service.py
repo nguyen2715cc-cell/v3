@@ -100,7 +100,10 @@ class LabsClient:
     def __init__(self, bearers: List[str], timeout: Tuple[int,int]=(20,180), on_event: Optional[Callable[[dict], None]]=None, debug_log: Optional[Callable[[str], None]]=None):
         self.tokens=[t.strip() for t in (bearers or []) if t.strip()]
         if not self.tokens: raise ValueError("No Labs tokens provided")
-        self._idx=0; self.timeout=timeout; self.on_event=on_event; self.debug_log=debug_log or (lambda x: None)
+        self._idx=0
+        self.timeout=timeout
+        self.on_event=on_event
+        self.debug_log=debug_log or (lambda x: None)
 
     def _tok(self)->str:
         t=self.tokens[self._idx % len(self.tokens)]; self._idx+=1; return t

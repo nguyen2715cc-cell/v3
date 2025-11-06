@@ -21,8 +21,9 @@ class VideoDownloader:
                         f.write(chunk)
                         downloaded += len(chunk)
         
-        file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
-        if not os.path.exists(output_path) or file_size == 0:
+        file_exists = os.path.exists(output_path)
+        file_size = os.path.getsize(output_path) if file_exists else 0
+        if not file_exists or file_size == 0:
             raise Exception("Download failed")
         
         self.log(f"[Download] ✓ Complete - File size: {file_size/1024/1024:.2f} MB")
