@@ -28,6 +28,9 @@ FONT_BODY = QFont("Segoe UI", 13)
 FONT_SMALL = QFont("Segoe UI", 12)
 FONT_MONO = QFont("Courier New", 11)
 
+# Default Project ID constant
+DEFAULT_PROJECT_ID = '87b19267-13d6-49cd-a7ed-db19a90c9339'
+
 def _ts():
     return datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')
 
@@ -103,8 +106,8 @@ class SettingsPanelV3Compact(QWidget):
         old_labs_tokens = config.get('labs_tokens', [])
         existing_accounts = config.get('labs_accounts', [])
         
-        # Combine all old token sources
-        all_old_tokens = list(set(old_tokens + old_labs_tokens))  # Remove duplicates
+        # Combine all old token sources (preserve order, remove duplicates)
+        all_old_tokens = list(dict.fromkeys(old_tokens + old_labs_tokens))
         
         if all_old_tokens and not existing_accounts:
             # Migration needed
@@ -121,7 +124,7 @@ class SettingsPanelV3Compact(QWidget):
             if reply == QMessageBox.Yes:
                 # Migrate
                 accounts = []
-                default_project_id = config.get('flow_project_id', '87b19267-13d6-49cd-a7ed-db19a90c9339')
+                default_project_id = config.get('flow_project_id', DEFAULT_PROJECT_ID)
                 
                 for i, token in enumerate(all_old_tokens):
                     accounts.append({
@@ -319,7 +322,7 @@ class SettingsPanelV3Compact(QWidget):
         proj_row.addWidget(proj_label)
         
         self.ed_project = _line('Project ID for new accounts')
-        self.ed_project.setText(self.state.get('flow_project_id', '87b19267-13d6-49cd-a7ed-db19a90c9339'))
+        self.ed_project.setText(self.state.get('flow_project_id', DEFAULT_PROJECT_ID))
         self.ed_project.setToolTip(
             "Default Project ID for new accounts.\n"
             "Each account can have its own Project ID in the table above."
@@ -513,7 +516,7 @@ class SettingsPanelV3Compact(QWidget):
         # Project ID - Pre-fill with default
         layout.addWidget(_label("Project ID:"))
         ed_project_id = _line("9bb9b09b-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
-        default_project = self.ed_project.text().strip() or '87b19267-13d6-49cd-a7ed-db19a90c9339'
+        default_project = self.ed_project.text().strip() or DEFAULT_PROJECT_ID
         ed_project_id.setText(default_project)
         layout.addWidget(ed_project_id)
         
@@ -681,7 +684,7 @@ class SettingsPanelV3Compact(QWidget):
             'elevenlabs_api_keys': self.w_eleven.get_keys(),
             'openai_api_keys': self.w_openai.get_keys(),
             'default_voice_id': self.ed_voice.text().strip() or '3VnrjnYrskPMDsapTr8X',
-            'flow_project_id': self.ed_project.text().strip() or '87b19267-13d6-49cd-a7ed-db19a90c9339',
+            'flow_project_id': self.ed_project.text().strip() or DEFAULT_PROJECT_ID,
             'system_prompts_url': self.ed_sheets_url.text().strip(),  # Enhanced: Save prompts URL
         }
         
