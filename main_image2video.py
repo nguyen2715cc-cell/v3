@@ -69,6 +69,14 @@ except ImportError as e:
         print("❌ Error: No Video Ads panel available")
         VideoAdsPanel = None
 
+# Clone Video - NEW FEATURE
+try:
+    from ui.clone_video_panel import CloneVideoPanel
+    print("✓ Loaded Clone Video Panel")
+except ImportError as e:
+    print(f"⚠️ Clone Video not found: {e}")
+    CloneVideoPanel = None
+
 # Utils
 try:
     from utils import config as cfg
@@ -125,6 +133,7 @@ QTabBar::tab:nth-child(1):selected { background: #5C6BC0; }  /* Settings - Purpl
 QTabBar::tab:nth-child(2):selected { background: #1E88E5; }  /* Image2Video - Blue */
 QTabBar::tab:nth-child(3):selected { background: #26A69A; }  /* Text2Video - Teal */
 QTabBar::tab:nth-child(4):selected { background: #FF7043; }  /* Video Ads - Orange */
+QTabBar::tab:nth-child(5):selected { background: #7C4DFF; }  /* Clone Video - Deep Purple */
 """
 
 
@@ -235,6 +244,17 @@ class MainWindow(QTabWidget):
                 self.video_ads = PlaceholderPanel("Video Ads V5")
             self.addTab(self.video_ads, "🛒 Video bán hàng")
             
+            # Tab 5: Clone Video
+            if CloneVideoPanel:
+                try:
+                    self.clone_video = CloneVideoPanel(self)
+                except Exception as e:
+                    print(f"❌ Error creating Clone Video panel: {e}")
+                    self.clone_video = PlaceholderPanel("Clone Video", str(e))
+            else:
+                self.clone_video = PlaceholderPanel("Clone Video")
+            self.addTab(self.clone_video, "🎬 Clone Video")
+            
         except Exception as e:
             QMessageBox.critical(
                 self,
@@ -256,7 +276,8 @@ class MainWindow(QTabWidget):
             ("⚙️  Settings", self.settings),
             ("🖼️  Image2Video", self.image2video),
             ("📝 Text2Video", self.text2video),
-            ("🛒 Video Ads", self.video_ads)
+            ("🛒 Video Ads", self.video_ads),
+            ("🎬 Clone Video", self.clone_video)
         ]
         
         for name, panel in panels:
