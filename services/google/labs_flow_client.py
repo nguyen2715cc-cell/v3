@@ -2,7 +2,17 @@ import base64, mimetypes, json, time, requests, os, re
 from typing import List, Dict, Optional, Tuple, Callable, Any
 
 
+# Support both package and flat layouts
+try:
+    from services.endpoints import UPLOAD_IMAGE_URL, I2V_URL, T2V_URL, BATCH_CHECK_URL
+except Exception:  # pragma: no cover
+    from endpoints import UPLOAD_IMAGE_URL, I2V_URL, T2V_URL, BATCH_CHECK_URL
+
+# Default fallback project ID (only used if not configured)
+DEFAULT_PROJECT_ID = "87b19267-13d6-49cd-a7ed-db19a90c9339"
+
 # Optional default_project_id from user config (non-breaking)
+# This MUST come after the fallback to properly override it
 try:
     from utils import config as _cfg_mod  # type: ignore
     _cfg = getattr(_cfg_mod, "load", lambda: {})() if hasattr(_cfg_mod, "load") else {}
@@ -13,15 +23,6 @@ try:
         DEFAULT_PROJECT_ID = _cfg_pid  # override safely if present
 except Exception:
     pass
-
-
-# Support both package and flat layouts
-try:
-    from services.endpoints import UPLOAD_IMAGE_URL, I2V_URL, T2V_URL, BATCH_CHECK_URL
-except Exception:  # pragma: no cover
-    from endpoints import UPLOAD_IMAGE_URL, I2V_URL, T2V_URL, BATCH_CHECK_URL
-
-DEFAULT_PROJECT_ID = "87b19267-13d6-49cd-a7ed-db19a90c9339"
 
 def _headers(bearer: str) -> dict:
     return {

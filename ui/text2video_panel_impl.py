@@ -492,7 +492,19 @@ class _Worker(QObject):
         st = cfg.load()
         tokens = st.get("tokens") or []
         project_id = st.get("default_project_id") or DEFAULT_PROJECT_ID
-        client = LabsClient(tokens, on_event=None)
+        
+        # Log the ProjectID being used
+        self.log.emit(f"[DEBUG] Using ProjectID: {project_id}")
+        if project_id == DEFAULT_PROJECT_ID:
+            self.log.emit(f"[DEBUG] Using default ProjectID (not configured in settings)")
+        else:
+            self.log.emit(f"[DEBUG] Using custom ProjectID from config")
+        
+        # Create client with debug logging
+        def debug_log(msg):
+            self.log.emit(msg)
+        
+        client = LabsClient(tokens, on_event=None, debug_log=debug_log)
         copies = p["copies"]
         title = p["title"]
         dir_videos = p["dir_videos"]
@@ -627,6 +639,8 @@ class _Worker(QObject):
                         card["url"] = video_url
                         
                         self.log.emit(f"[SUCCESS] Scene {scene} Copy {copy_num}: Video ready!")
+                        self.log.emit(f"[DEBUG] Video URL domain: {video_url.split('/')[2] if '://' in video_url else 'unknown'}")
+                        self.log.emit(f"[DEBUG] Full video URL: {video_url[:100]}...")
                         
                         # Download logic - Always download videos
                         # Sanitize filename to handle Vietnamese characters and special characters

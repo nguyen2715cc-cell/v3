@@ -2,7 +2,17 @@ import base64, mimetypes, json, time, requests, os, re
 from typing import List, Dict, Optional, Tuple, Callable, Any
 
 
+# Support both package and flat layouts
+try:
+    from services.endpoints import UPLOAD_IMAGE_URL, I2V_URL, T2V_URL, BATCH_CHECK_URL
+except Exception:  # pragma: no cover
+    from endpoints import UPLOAD_IMAGE_URL, I2V_URL, T2V_URL, BATCH_CHECK_URL
+
+# Default fallback project ID (only used if not configured)
+DEFAULT_PROJECT_ID = "87b19267-13d6-49cd-a7ed-db19a90c9339"
+
 # Optional default_project_id from user config (non-breaking)
+# This MUST come after the fallback to properly override it
 try:
     from utils import config as _cfg_mod  # type: ignore
     _cfg = getattr(_cfg_mod, "load", lambda: {})() if hasattr(_cfg_mod, "load") else {}
@@ -13,15 +23,6 @@ try:
         DEFAULT_PROJECT_ID = _cfg_pid  # override safely if present
 except Exception:
     pass
-
-
-# Support both package and flat layouts
-try:
-    from services.endpoints import UPLOAD_IMAGE_URL, I2V_URL, T2V_URL, BATCH_CHECK_URL
-except Exception:  # pragma: no cover
-    from endpoints import UPLOAD_IMAGE_URL, I2V_URL, T2V_URL, BATCH_CHECK_URL
-
-DEFAULT_PROJECT_ID = "87b19267-13d6-49cd-a7ed-db19a90c9339"
 
 def _headers(bearer: str) -> dict:
     return {
@@ -96,10 +97,10 @@ def _trim_prompt_text(prompt_text: Any)->str:
         return str(obj)[:1800]
 
 class LabsClient:
-    def __init__(self, bearers: List[str], timeout: Tuple[int,int]=(20,180), on_event: Optional[Callable[[dict], None]]=None):
+    def __init__(self, bearers: List[str], timeout: Tuple[int,int]=(20,180), on_event: Optional[Callable[[dict], None]]=None, debug_log: Optional[Callable[[str], None]]=None):
         self.tokens=[t.strip() for t in (bearers or []) if t.strip()]
         if not self.tokens: raise ValueError("No Labs tokens provided")
-        self._idx=0; self.timeout=timeout; self.on_event=on_event
+        self._idx=0; self.timeout=timeout; self.on_event=on_event; self.debug_log=debug_log or (lambda x: None)
 
     def _tok(self)->str:
         t=self.tokens[self._idx % len(self.tokens)]; self._idx+=1; return t
@@ -110,19 +111,34 @@ class LabsClient:
             except Exception: pass
 
     def _post(self, url: str, payload: dict) -> dict:
+        # Debug logging: Log the API endpoint and project ID
+        project_id = payload.get("clientContext", {}).get("projectId", "NONE")
+        self.debug_log(f"[DEBUG] API Call: {url}")
+        self.debug_log(f"[DEBUG] ProjectID: {project_id}")
+        self.debug_log(f"[DEBUG] Payload keys: {list(payload.keys())}")
+        
         last=None
         for attempt in range(3):
             try:
                 r=requests.post(url, headers=_headers(self._tok()), json=payload, timeout=self.timeout)
                 if r.status_code==200:
                     self._emit("http_ok", code=200)
-                    try: return r.json()
+                    self.debug_log(f"[DEBUG] API Response: HTTP 200 OK")
+                    try: 
+                        response_data = r.json()
+                        # Log operation names if present
+                        if "operations" in response_data:
+                            op_count = len(response_data.get("operations", []))
+                            self.debug_log(f"[DEBUG] Received {op_count} operations")
+                        return response_data
                     except Exception: return {}
                 det=""
                 try: det=r.json().get("error",{}).get("message","")[:300]
                 except Exception: det=(r.text or "")[:300]
+                self.debug_log(f"[DEBUG] API Error: HTTP {r.status_code} - {det}")
                 self._emit("http_other_err", code=r.status_code, detail=det); r.raise_for_status()
             except Exception as e:
+                self.debug_log(f"[DEBUG] API Exception (attempt {attempt+1}/3): {str(e)[:200]}")
                 last=e; time.sleep(0.7*(attempt+1))
         raise last
 
@@ -246,6 +262,7 @@ class LabsClient:
 
     def batch_check_operations(self, op_names: List[str])->Dict[str,Dict]:
         if not op_names: return {}
+        self.debug_log(f"[DEBUG] Checking status for {len(op_names)} operations")
         data=self._post(BATCH_CHECK_URL, self._wrap_ops(op_names)) or {}
         out={}
         def _dedup(xs):
@@ -258,6 +275,11 @@ class LabsClient:
             st=_normalize_status(item)
             urls=_collect_urls_any(item.get("response",{})) or _collect_urls_any(item)
             vurls=[u for u in urls if "/video/" in u]; iurls=[u for u in urls if "/image/" in u]
+            
+            # Debug logging for video URLs
+            if vurls:
+                self.debug_log(f"[DEBUG] Operation {key[:40]}... has video URL: {vurls[0][:80]}...")
+            
             out[key or "unknown"]={"status": ("COMPLETED" if st=="DONE" and vurls else ("DONE_NO_URL" if st=="DONE" else st)),
                                    "video_urls": _dedup(vurls), "image_urls": _dedup(iurls), "raw": item}
         return out
