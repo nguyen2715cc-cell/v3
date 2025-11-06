@@ -18,7 +18,6 @@ sys.path.insert(0, str(project_root))
 
 from services.tts_service import synthesize_speech, generate_audio_from_scene
 from services.audio_generator import generate_batch_audio, validate_voiceover_config
-from services.voice_options import get_google_tts_ssml
 
 
 def example_1_simple_vietnamese_audio():

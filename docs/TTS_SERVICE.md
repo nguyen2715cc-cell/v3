@@ -245,8 +245,13 @@ audio = synthesize_speech(config)
 
 ## Examples
 
-See `/tmp/test_tts_service.py` for complete examples of:
+See `examples/generate_scene_audio.py` for complete examples of:
 - Basic TTS synthesis
 - Scene JSON processing
-- Batch generation
+- Configuration validation
 - Error handling
+
+Run the example:
+```bash
+python examples/generate_scene_audio.py
+```
