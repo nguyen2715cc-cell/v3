@@ -203,6 +203,119 @@ def _call_gemini(prompt, api_key, model="gemini-2.5-flash"):
     else:
         raise RuntimeError("Gemini API failed with unknown error")
 
+def _calculate_text_similarity(text1, text2):
+    """
+    Calculate similarity between two texts using simple token-based approach.
+    Returns similarity score between 0.0 and 1.0.
+    """
+    if not text1 or not text2:
+        return 0.0
+    
+    # Normalize: lowercase and split into words
+    words1 = set(text1.lower().split())
+    words2 = set(text2.lower().split())
+    
+    if not words1 or not words2:
+        return 0.0
+    
+    # Jaccard similarity: intersection / union
+    intersection = len(words1 & words2)
+    union = len(words1 | words2)
+    
+    return intersection / union if union > 0 else 0.0
+
+def _validate_scene_uniqueness(scenes, similarity_threshold=0.8):
+    """
+    Validate that scenes are unique (not duplicates).
+    Checks both prompt_vi and prompt_tgt for similarity.
+    
+    Args:
+        scenes: List of scene dicts with prompt_vi/prompt_tgt
+        similarity_threshold: Maximum allowed similarity (default 0.8 = 80%)
+    
+    Returns:
+        List of duplicate pairs found: [(scene1_idx, scene2_idx, similarity), ...]
+    """
+    duplicates = []
+    
+    for i in range(len(scenes)):
+        for j in range(i + 1, len(scenes)):
+            scene1 = scenes[i]
+            scene2 = scenes[j]
+            
+            # Check both Vietnamese and target prompts
+            prompt1_vi = scene1.get("prompt_vi", "")
+            prompt2_vi = scene2.get("prompt_vi", "")
+            prompt1_tgt = scene1.get("prompt_tgt", "")
+            prompt2_tgt = scene2.get("prompt_tgt", "")
+            
+            # Calculate similarity for both language versions
+            sim_vi = _calculate_text_similarity(prompt1_vi, prompt2_vi)
+            sim_tgt = _calculate_text_similarity(prompt1_tgt, prompt2_tgt)
+            
+            # Use the higher similarity score
+            max_sim = max(sim_vi, sim_tgt)
+            
+            if max_sim >= similarity_threshold:
+                duplicates.append((i + 1, j + 1, max_sim))  # 1-based indexing for display
+    
+    return duplicates
+
+def _enforce_character_consistency(scenes, character_bible):
+    """
+    Enhance scene prompts with character visual identity details from character bible.
+    This ensures consistent character appearance across all scenes.
+    
+    Args:
+        scenes: List of scene dicts
+        character_bible: List of character dicts with visual_identity field
+    
+    Returns:
+        Enhanced scenes with character details injected
+    """
+    if not character_bible or not isinstance(character_bible, list):
+        return scenes
+    
+    # Build character lookup by name
+    char_lookup = {}
+    for char in character_bible:
+        name = char.get("name", "").strip()
+        visual_id = char.get("visual_identity", "").strip()
+        if name and visual_id:
+            char_lookup[name.lower()] = visual_id
+    
+    if not char_lookup:
+        return scenes
+    
+    # Enhance each scene with character visual details
+    for scene in scenes:
+        characters = scene.get("characters", [])
+        if not characters:
+            continue
+        
+        # Collect visual details for characters in this scene
+        visual_details = []
+        for char_name in characters:
+            char_key = char_name.lower()
+            if char_key in char_lookup:
+                visual_details.append(f"{char_name}: {char_lookup[char_key]}")
+        
+        # Prepend visual details to scene prompts
+        if visual_details:
+            visual_block = "CHARACTER CONSISTENCY: " + "; ".join(visual_details)
+            
+            # Enhance prompt_vi
+            prompt_vi = scene.get("prompt_vi", "")
+            if prompt_vi and visual_block not in prompt_vi:
+                scene["prompt_vi"] = f"{visual_block}. {prompt_vi}"
+            
+            # Enhance prompt_tgt
+            prompt_tgt = scene.get("prompt_tgt", "")
+            if prompt_tgt and visual_block not in prompt_tgt:
+                scene["prompt_tgt"] = f"{visual_block}. {prompt_tgt}"
+    
+    return scenes
+
 def generate_script(idea, style, duration_seconds, provider='Gemini 2.5', api_key=None, output_lang='vi', domain=None, topic=None, voice_config=None):
     """
     Generate video script with optional domain/topic expertise and voice settings
@@ -251,6 +364,19 @@ def generate_script(idea, style, duration_seconds, provider='Gemini 2.5', api_ke
         # FIXED: Use gpt-4-turbo instead of gpt-5
         res=_call_openai(prompt,key,"gpt-4-turbo")
     if "scenes" not in res: raise RuntimeError("LLM không trả về đúng schema.")
+    
+    # ISSUE #1 FIX: Validate scene uniqueness
+    scenes = res.get("scenes", [])
+    duplicates = _validate_scene_uniqueness(scenes, similarity_threshold=0.8)
+    if duplicates:
+        dup_msg = ", ".join([f"Scene {i} & {j} ({sim*100:.0f}% similar)" for i, j, sim in duplicates])
+        print(f"[WARN] Duplicate scenes detected: {dup_msg}")
+        # Note: We warn but don't fail - the UI can decide how to handle this
+    
+    # ISSUE #2 FIX: Enforce character consistency
+    character_bible = res.get("character_bible", [])
+    if character_bible:
+        res["scenes"] = _enforce_character_consistency(scenes, character_bible)
     
     # Store voice configuration in result for consistency
     if voice_config:

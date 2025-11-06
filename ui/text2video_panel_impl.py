@@ -490,9 +490,19 @@ class _Worker(QObject):
     def _run_video(self):
         p = self.payload
         st = cfg.load()
-        tokens = st.get("tokens") or []
-        project_id = st.get("default_project_id") or DEFAULT_PROJECT_ID
-        client = LabsClient(tokens, on_event=None)
+        
+        # ISSUE #4 FIX: Multi-account support
+        from services.account_manager import get_account_manager
+        account_mgr = get_account_manager()
+        
+        # Check if multi-account mode is enabled
+        if account_mgr.is_multi_account_enabled():
+            self.log.emit(f"[INFO] Multi-account mode: {len(account_mgr.get_enabled_accounts())} accounts active")
+        else:
+            # Fallback to single account mode
+            tokens = st.get("tokens") or []
+            project_id = st.get("default_project_id") or DEFAULT_PROJECT_ID
+        
         copies = p["copies"]
         title = p["title"]
         dir_videos = p["dir_videos"]
@@ -506,6 +516,21 @@ class _Worker(QObject):
         for scene_idx, scene in enumerate(p["scenes"], start=1):
             ratio = scene["aspect"]
             model_key = p.get("model_key","")
+
+            # ISSUE #4 FIX: Use round-robin account selection for each scene
+            if account_mgr.is_multi_account_enabled():
+                account = account_mgr.get_account_for_scene(scene_idx - 1)  # 0-based index
+                if account:
+                    tokens = account.tokens
+                    project_id = account.project_id
+                    self.log.emit(f"[INFO] Scene {scene_idx} → Account: {account.name} (ProjectID: {project_id[:8]}...)")
+                else:
+                    self.log.emit(f"[WARN] No account available for scene {scene_idx}, using default")
+                    tokens = st.get("tokens") or []
+                    project_id = st.get("default_project_id") or DEFAULT_PROJECT_ID
+            
+            # Create client for this scene's account
+            client = LabsClient(tokens, on_event=None)
 
             # Single API call with copies parameter (instead of N calls)
             body = {"prompt": scene["prompt"], "copies": copies, "model": model_key, "aspect_ratio": ratio}

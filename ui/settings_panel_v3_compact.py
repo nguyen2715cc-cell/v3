@@ -213,6 +213,72 @@ class SettingsPanelV3Compact(QWidget):
         api_layout.addLayout(toggle_row)
         root.addWidget(api_group)
         
+        # === MULTI-ACCOUNT MANAGEMENT (ISSUE #4) ===
+        multi_acc_group = QGroupBox("🔄 Multi-Account Management (NEW)")
+        multi_acc_group.setFont(FONT_H2)
+        multi_acc_layout = QVBoxLayout(multi_acc_group)
+        multi_acc_layout.setSpacing(6)
+        
+        hint2 = QLabel("💡 Configure multiple Google Labs accounts for parallel processing and higher quotas")
+        hint2.setFont(FONT_SMALL)
+        hint2.setStyleSheet("color: #757575; font-style: italic;")
+        multi_acc_layout.addWidget(hint2)
+        
+        # Account list widget
+        from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox
+        self.accounts_table = QTableWidget()
+        self.accounts_table.setColumnCount(4)
+        self.accounts_table.setHorizontalHeaderLabels(["Enabled", "Account Name", "Project ID", "Tokens"])
+        self.accounts_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.accounts_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.accounts_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.accounts_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.accounts_table.setMaximumHeight(200)
+        self.accounts_table.setAlternatingRowColors(True)
+        self.accounts_table.setStyleSheet("""
+            QTableWidget {
+                background: white;
+                border: 2px solid #BDBDBD;
+                border-radius: 6px;
+            }
+            QTableWidget::item {
+                padding: 8px;
+            }
+        """)
+        
+        # Load accounts from config
+        self._load_accounts_table()
+        
+        multi_acc_layout.addWidget(self.accounts_table)
+        
+        # Account management buttons
+        acc_buttons = QHBoxLayout()
+        acc_buttons.setSpacing(8)
+        
+        self.btn_add_account = CompactButton("➕ Add Account")
+        self.btn_add_account.setObjectName("btn_primary")
+        self.btn_add_account.clicked.connect(self._add_account)
+        acc_buttons.addWidget(self.btn_add_account)
+        
+        self.btn_edit_account = CompactButton("✏️ Edit Account")
+        self.btn_edit_account.clicked.connect(self._edit_account)
+        acc_buttons.addWidget(self.btn_edit_account)
+        
+        self.btn_remove_account = CompactButton("🗑️ Remove Account")
+        self.btn_remove_account.clicked.connect(self._remove_account)
+        acc_buttons.addWidget(self.btn_remove_account)
+        
+        acc_buttons.addStretch()
+        
+        self.lb_account_status = QLabel("")
+        self.lb_account_status.setFont(FONT_SMALL)
+        self.lb_account_status.setStyleSheet("color: #4CAF50; font-weight: bold;")
+        acc_buttons.addWidget(self.lb_account_status)
+        
+        multi_acc_layout.addLayout(acc_buttons)
+        
+        root.addWidget(multi_acc_group)
+        
         # === STORAGE - ONE LINE ===
         storage_group = QGroupBox("💾 Storage Settings")
         storage_group.setFont(FONT_H2)
@@ -309,6 +375,222 @@ class SettingsPanelV3Compact(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
     
+    def _load_accounts_table(self):
+        """Load accounts from config into table"""
+        from services.account_manager import get_account_manager
+        
+        account_mgr = get_account_manager()
+        accounts = account_mgr.get_all_accounts()
+        
+        self.accounts_table.setRowCount(len(accounts))
+        
+        for row, account in enumerate(accounts):
+            # Enabled checkbox
+            checkbox_widget = QWidget()
+            checkbox_layout = QHBoxLayout(checkbox_widget)
+            checkbox_layout.setContentsMargins(0, 0, 0, 0)
+            checkbox_layout.setAlignment(Qt.AlignCenter)
+            checkbox = QCheckBox()
+            checkbox.setChecked(account.enabled)
+            checkbox.stateChanged.connect(lambda state, r=row: self._toggle_account(r, state))
+            checkbox_layout.addWidget(checkbox)
+            self.accounts_table.setCellWidget(row, 0, checkbox_widget)
+            
+            # Account name
+            name_item = QTableWidgetItem(account.name)
+            self.accounts_table.setItem(row, 1, name_item)
+            
+            # Project ID (truncated)
+            project_id_display = account.project_id[:16] + "..." if len(account.project_id) > 16 else account.project_id
+            project_item = QTableWidgetItem(project_id_display)
+            self.accounts_table.setItem(row, 2, project_item)
+            
+            # Token count
+            token_count = QTableWidgetItem(f"{len(account.tokens)} token(s)")
+            self.accounts_table.setItem(row, 3, token_count)
+    
+    def _toggle_account(self, row, state):
+        """Toggle account enabled state"""
+        from services.account_manager import get_account_manager
+        
+        account_mgr = get_account_manager()
+        if state == Qt.Checked:
+            account_mgr.enable_account(row)
+        else:
+            account_mgr.disable_account(row)
+    
+    def _add_account(self):
+        """Add a new account via dialog"""
+        from PyQt5.QtWidgets import QDialog, QDialogButtonBox
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Add Google Labs Account")
+        dialog.setMinimumWidth(500)
+        
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(12)
+        
+        # Account name
+        layout.addWidget(_label("Account Name:"))
+        ed_name = _line("e.g., Account 1, Production, Testing...")
+        layout.addWidget(ed_name)
+        
+        # Project ID
+        layout.addWidget(_label("Project ID:"))
+        ed_project_id = _line("9bb9b09b-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+        layout.addWidget(ed_project_id)
+        
+        # Tokens
+        layout.addWidget(_label("OAuth Tokens (one per line):"))
+        from PyQt5.QtWidgets import QTextEdit
+        ed_tokens = QTextEdit()
+        ed_tokens.setPlaceholderText("Paste OAuth tokens here, one per line")
+        ed_tokens.setMaximumHeight(120)
+        ed_tokens.setStyleSheet("""
+            QTextEdit {
+                background: white;
+                border: 2px solid #BDBDBD;
+                border-radius: 6px;
+                padding: 8px;
+                font-family: 'Courier New';
+                font-size: 11px;
+            }
+        """)
+        layout.addWidget(ed_tokens)
+        
+        # Buttons
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        if dialog.exec_() == QDialog.Accepted:
+            from services.account_manager import get_account_manager, LabsAccount
+            
+            name = ed_name.text().strip()
+            project_id = ed_project_id.text().strip()
+            tokens_text = ed_tokens.toPlainText().strip()
+            tokens = [line.strip() for line in tokens_text.split('\n') if line.strip()]
+            
+            if not name or not project_id or not tokens:
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "Invalid Input", "Please fill all fields")
+                return
+            
+            account = LabsAccount(name=name, project_id=project_id, tokens=tokens, enabled=True)
+            
+            account_mgr = get_account_manager()
+            account_mgr.add_account(account)
+            
+            self._load_accounts_table()
+            self.lb_account_status.setText(f"✓ Added account: {name}")
+    
+    def _edit_account(self):
+        """Edit selected account"""
+        from PyQt5.QtWidgets import QMessageBox, QDialog, QDialogButtonBox, QTextEdit
+        
+        row = self.accounts_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "No Selection", "Please select an account to edit")
+            return
+        
+        from services.account_manager import get_account_manager
+        account_mgr = get_account_manager()
+        account = account_mgr.get_account(row)
+        
+        if not account:
+            return
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Edit Google Labs Account")
+        dialog.setMinimumWidth(500)
+        
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(12)
+        
+        # Account name
+        layout.addWidget(_label("Account Name:"))
+        ed_name = _line()
+        ed_name.setText(account.name)
+        layout.addWidget(ed_name)
+        
+        # Project ID
+        layout.addWidget(_label("Project ID:"))
+        ed_project_id = _line()
+        ed_project_id.setText(account.project_id)
+        layout.addWidget(ed_project_id)
+        
+        # Tokens
+        layout.addWidget(_label("OAuth Tokens (one per line):"))
+        ed_tokens = QTextEdit()
+        ed_tokens.setPlainText('\n'.join(account.tokens))
+        ed_tokens.setMaximumHeight(120)
+        ed_tokens.setStyleSheet("""
+            QTextEdit {
+                background: white;
+                border: 2px solid #BDBDBD;
+                border-radius: 6px;
+                padding: 8px;
+                font-family: 'Courier New';
+                font-size: 11px;
+            }
+        """)
+        layout.addWidget(ed_tokens)
+        
+        # Buttons
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        if dialog.exec_() == QDialog.Accepted:
+            from services.account_manager import LabsAccount
+            
+            name = ed_name.text().strip()
+            project_id = ed_project_id.text().strip()
+            tokens_text = ed_tokens.toPlainText().strip()
+            tokens = [line.strip() for line in tokens_text.split('\n') if line.strip()]
+            
+            if not name or not project_id or not tokens:
+                QMessageBox.warning(self, "Invalid Input", "Please fill all fields")
+                return
+            
+            # Update account
+            account.name = name
+            account.project_id = project_id
+            account.tokens = tokens
+            
+            self._load_accounts_table()
+            self.lb_account_status.setText(f"✓ Updated account: {name}")
+    
+    def _remove_account(self):
+        """Remove selected account"""
+        from PyQt5.QtWidgets import QMessageBox
+        
+        row = self.accounts_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "No Selection", "Please select an account to remove")
+            return
+        
+        from services.account_manager import get_account_manager
+        account_mgr = get_account_manager()
+        account = account_mgr.get_account(row)
+        
+        if not account:
+            return
+        
+        reply = QMessageBox.question(
+            self, 
+            "Confirm Removal", 
+            f"Remove account '{account.name}'?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            account_mgr.remove_account(row)
+            self._load_accounts_table()
+            self.lb_account_status.setText(f"✓ Removed account: {account.name}")
+    
     def _toggle_storage(self):
         is_local = self.rb_local.isChecked()
         self.ed_local.setEnabled(is_local)
@@ -339,6 +621,12 @@ class SettingsPanelV3Compact(QWidget):
             'flow_project_id': self.ed_project.text().strip() or '87b19267-13d6-49cd-a7ed-db19a90c9339',
             'system_prompts_url': self.ed_sheets_url.text().strip(),  # Enhanced: Save prompts URL
         }
+        
+        # ISSUE #4 FIX: Save multi-account manager data
+        from services.account_manager import get_account_manager
+        account_mgr = get_account_manager()
+        account_mgr.save_to_config(st)
+        
         cfg.save(st)
         self.lb_saved.setText(f'✓ Saved at {_ts()}')
         
