@@ -99,7 +99,8 @@ class SettingsPanelV3Compact(QWidget):
         Auto-migrate old single-token config to multi-account format
         Called on first Settings panel load
         """
-        config = cfg.load()
+        # Use existing state instead of reloading
+        config = self.state
         
         # Check if old 'tokens' or 'labs_tokens' array exists but no 'labs_accounts'
         old_tokens = config.get('tokens', [])
@@ -139,8 +140,9 @@ class SettingsPanelV3Compact(QWidget):
                 config['tokens_backup'] = all_old_tokens  # Keep backup
                 cfg.save(config)
                 
-                # Reload account table
-                if hasattr(self, 'accounts_table'):
+                # Reload state and account table
+                self.state = cfg.load()
+                if hasattr(self, 'accounts_table') and self.accounts_table is not None:
                     self._load_accounts_table()
                 
                 QMessageBox.information(
@@ -276,7 +278,7 @@ class SettingsPanelV3Compact(QWidget):
         multi_acc_layout.setSpacing(6)
         
         hint2 = QLabel(
-            "💡 Tip: Use multiple accounts to avoid rate limits and increase speed 3-4x!\n"
+            "💡 Tip: Use multiple accounts to avoid rate limits and increase processing speed!\n"
             "Each account will process scenes in parallel."
         )
         hint2.setFont(FONT_SMALL)
