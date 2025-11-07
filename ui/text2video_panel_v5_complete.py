@@ -91,6 +91,8 @@ class StoryboardView(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        # BUG FIX #1: Store reference to main panel for retry button
+        self.main_panel = parent
         
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -217,7 +219,8 @@ class StoryboardView(QWidget):
                     }
                     QPushButton:hover { background: #F57C00; }
                 """)
-                retry_btn.clicked.connect(lambda checked, sn=scene_num: self.parent()._retry_failed_scene(sn))
+                # BUG FIX #1: Use main_panel reference instead of parent() to avoid AttributeError
+                retry_btn.clicked.connect(lambda checked, sn=scene_num: self.main_panel._retry_failed_scene(sn))
                 card_layout.addWidget(retry_btn)
         
         card.scene_num = scene_num
@@ -1800,13 +1803,16 @@ class Text2VideoPanelV5(QWidget):
         pass  # Preview removed
     
     def _load_voices_for_provider(self):
-        """Load voices for selected provider"""
+        """BUG FIX #3: Load voices for selected provider and language"""
         try:
             provider = self.cb_tts_provider.currentData()
             language = self.cb_out_lang.currentData()
             
             if not provider or not get_voices_for_provider:
                 return
+            
+            # BUG FIX #3: Add logging to confirm language-specific voice loading
+            self._append_log(f"[INFO] Loading voices for provider={provider}, language={language}")
             
             voices = get_voices_for_provider(provider, language)
             
@@ -1821,7 +1827,9 @@ class Text2VideoPanelV5(QWidget):
             self.cb_voice.blockSignals(False)
             
             if voices:
-                self._append_log(f"[INFO] Loaded {len(voices)} voices")
+                self._append_log(f"[INFO] Loaded {len(voices)} voices for {language}")
+            else:
+                self._append_log(f"[WARN] No voices found for provider={provider}, language={language}")
         
         except Exception as e:
             self._append_log(f"[ERR] Failed to load voices: {e}")

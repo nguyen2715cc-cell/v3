@@ -166,17 +166,18 @@ def build_prompt_json(scene_index:int, desc_vi:str, desc_tgt:str, lang_code:str,
     if location_context:
         location_lock = f"CRITICAL: All scenes must be in {location_context}. Do NOT change background, setting, or environment. Maintain exact location consistency across all scenes."
     
+    # BUG FIX #2: Enhanced character consistency locks
     hard_locks = {
-        "identity": "Keep the same face, body, and identity across scenes.",
+        "identity": "CRITICAL: Keep same person/character across all scenes. Same face, same body, same identity. Do NOT change the character or introduce different people.",
         "wardrobe": "Outfit consistency is required. Do NOT change outfit, color, or add accessories without instruction.",
         "hair_makeup": "Keep hair and makeup consistent; do NOT change length or color unless explicitly instructed.",
         "location": location_lock
     }
 
     # Part D: Enhanced character details with detailed bible
-    # BUG FIX: Build comprehensive character_details with visual_identity for ALL characters
+    # BUG FIX #2: Build comprehensive character_details with CRITICAL consistency requirement
     # This ensures character consistency without polluting voiceover text
-    character_details = "Primary talent remains visually consistent across all scenes."
+    character_details = "CRITICAL: Keep same person/character across all scenes. Primary talent remains visually consistent across all scenes."
     if enhanced_bible and hasattr(enhanced_bible, 'characters'):
         # Use detailed character bible
         try:
@@ -186,14 +187,14 @@ def build_prompt_json(scene_index:int, desc_vi:str, desc_tgt:str, lang_code:str,
             # Extract just the character block for character_details field
             if '\n\n' in desc_with_char:
                 char_block = desc_with_char.split('\n\n')[0]
-                character_details = char_block
+                character_details = f"CRITICAL: Keep same person/character across all scenes. {char_block}"
         except Exception as e:
             # Log the error for debugging but continue with fallback
             import sys
             print(f"[WARN] Character bible injection failed: {e}", file=sys.stderr)
             # Intentional fallback to basic character_details - continue processing
     elif character_bible and isinstance(character_bible, list) and len(character_bible) > 0:
-        # BUG FIX: Include ALL characters with visual_identity, not just first one
+        # BUG FIX #2: Include ALL characters with visual_identity and CRITICAL consistency note
         char_parts = []
         for char in character_bible:
             nm = char.get("name", "")
@@ -214,7 +215,7 @@ def build_prompt_json(scene_index:int, desc_vi:str, desc_tgt:str, lang_code:str,
                 char_parts.append(" ".join(parts))
         
         if char_parts:
-            character_details = "; ".join(char_parts) + ". Keep appearance and demeanor consistent across all scenes."
+            character_details = "CRITICAL: Keep same person/character across all scenes. " + "; ".join(char_parts) + ". Keep appearance and demeanor consistent across all scenes."
         else:
             # Fallback if no characters have proper data
             main = character_bible[0]
@@ -222,7 +223,7 @@ def build_prompt_json(scene_index:int, desc_vi:str, desc_tgt:str, lang_code:str,
             role = main.get("role", "")
             key = main.get("key_trait", "")
             mot = main.get("motivation", "")
-            character_details = f"{nm} ({role}) — trait: {key}; motivation: {mot}. Keep appearance and demeanor consistent."
+            character_details = f"CRITICAL: Keep same person/character across all scenes. {nm} ({role}) — trait: {key}; motivation: {mot}. Keep appearance and demeanor consistent."
 
     # Enhanced: Match voiceover language with target language setting
     # Logic:
@@ -280,12 +281,30 @@ def build_prompt_json(scene_index:int, desc_vi:str, desc_tgt:str, lang_code:str,
     elif expressiveness > 0.7:
         expressiveness_description = "highly expressive, dynamic delivery"
     
+    # BUG FIX #3: Validate voice language matches output language
+    # Log warning if mismatch detected (voice selection should already filter by language)
+    voice_lang_validated = True
+    if voice_id and tts_provider:
+        try:
+            from services.voice_options import get_voice_info
+            voice_info = get_voice_info(tts_provider, voice_id)
+            if voice_info:
+                voice_supported_langs = voice_info.get("languages", [])
+                if voice_supported_langs and lang_code not in voice_supported_langs:
+                    import sys
+                    print(f"[WARN] Voice language mismatch: voice {voice_id} supports {voice_supported_langs}, but target language is {lang_code}", file=sys.stderr)
+                    voice_lang_validated = False
+        except Exception as e:
+            import sys
+            print(f"[WARN] Voice validation failed: {e}", file=sys.stderr)
+    
     voiceover_config = {
         "language": lang_code or "vi",
         "tts_provider": tts_provider or "google",
         "voice_id": voice_id or "",
         "voice_name": voice_name or "",
         "voice_description": f"TTS voice for {lang_code or 'vi'} language content",
+        "voice_language_validated": voice_lang_validated,
         "speaking_style": speaking_style,
         "style_description": style_description,
         "text": vo_text,
@@ -319,14 +338,13 @@ def build_prompt_json(scene_index:int, desc_vi:str, desc_tgt:str, lang_code:str,
             import sys
             print(f"[WARN] Domain context failed: {e}", file=sys.stderr)
     
-    # Part F: Enhanced persona with expertise context
+    # BUG FIX #4: Remove duplicate expertise_context from persona
+    # Keep expertise_intro only in domain_context to avoid data duplication
     persona = {
         "role": "Creative Video Director",
         "tone": "Cinematic and evocative",
         "knowledge_level": "Expert in visual storytelling"
     }
-    if domain_context:
-        persona["expertise_context"] = domain_context.get("expertise_intro", "")
 
     # Part F: Build metadata
     metadata = {
