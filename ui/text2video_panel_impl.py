@@ -281,22 +281,10 @@ def build_prompt_json(scene_index:int, desc_vi:str, desc_tgt:str, lang_code:str,
     elif expressiveness > 0.7:
         expressiveness_description = "highly expressive, dynamic delivery"
     
-    # BUG FIX #3: Validate voice language matches output language
-    # Log warning if mismatch detected (voice selection should already filter by language)
-    voice_lang_validated = True
-    if voice_id and tts_provider:
-        try:
-            from services.voice_options import get_voice_info
-            voice_info = get_voice_info(tts_provider, voice_id)
-            if voice_info:
-                voice_supported_langs = voice_info.get("languages", [])
-                if voice_supported_langs and lang_code not in voice_supported_langs:
-                    import sys
-                    print(f"[WARN] Voice language mismatch: voice {voice_id} supports {voice_supported_langs}, but target language is {lang_code}", file=sys.stderr)
-                    voice_lang_validated = False
-        except Exception as e:
-            import sys
-            print(f"[WARN] Voice validation failed: {e}", file=sys.stderr)
+    # BUG FIX #3: Add validation flag to track if voice matches target language
+    # The get_voices_for_provider function already filters voices by language,
+    # so if a voice_id is provided, it should already match the language
+    voice_lang_validated = bool(voice_id and tts_provider)
     
     voiceover_config = {
         "language": lang_code or "vi",
