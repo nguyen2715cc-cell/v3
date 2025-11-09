@@ -1014,6 +1014,12 @@ class _Worker(QObject):
 
             # Single API call with copies parameter (instead of N calls)
             body = {"prompt": scene["prompt"], "copies": copies, "model": model_key, "aspect_ratio": ratio}
+            
+            # Store bearer token for multi-account download support
+            # Extract the first token from the tokens list if available
+            if tokens and len(tokens) > 0:
+                body["bearer_token"] = tokens[0]
+            
             self.log.emit(f"[INFO] Start scene {actual_scene_num} with {copies} copies in one batch…")
             rc = client.start_one(body, model_key, ratio, scene["prompt"], copies=copies, project_id=project_id)
 
@@ -1432,6 +1438,12 @@ class _Worker(QObject):
 
                     # Start generation
                     body = {"prompt": scene["prompt"], "copies": copies, "model": model_key, "aspect_ratio": ratio}
+                    
+                    # Store bearer token for multi-account download support
+                    # Extract the first token from the account's tokens list if available
+                    if account.tokens and len(account.tokens) > 0:
+                        body["bearer_token"] = account.tokens[0]
+                    
                     results_queue.put(("log", f"{thread_name}: Starting scene {actual_scene_num} ({copies} copies)"))
 
                     rc = client.start_one(body, model_key, ratio, scene["prompt"], copies=copies, project_id=account.project_id)

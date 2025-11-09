@@ -286,6 +286,12 @@ class VideoGenerationWorker(QThread):
                 "model": model_key,
                 "aspect_ratio": ratio
             }
+            
+            # Store bearer token for multi-account download support
+            # Extract the first token from the tokens list if available
+            if tokens and len(tokens) > 0:
+                body["bearer_token"] = tokens[0]
+            
             self.log.emit(f"[INFO] Start scene {actual_scene_num} with {copies} copies in one batch…")
             rc = client.start_one(
                 body, model_key, ratio, scene["prompt"], copies=copies, project_id=project_id
