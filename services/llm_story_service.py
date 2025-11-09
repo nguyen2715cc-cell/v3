@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import json, requests
+from typing import Dict, List, Any
 from services.core.key_manager import get_key
 
 # Constants for validation
