@@ -2778,11 +2778,15 @@ class Text2VideoPanelV5(QWidget):
                 if topic and topic != "(Chọn lĩnh vực để load chủ đề)":
                     genre = f"{domain} - {topic}"
             
-            # Get folder path
+            # Get folder path - use project-specific folder, not just download root
             folder_path = ""
             if cfg:
                 state = cfg.load()
-                folder_path = state.get("download_root", "")
+                download_root = state.get("download_root", "")
+                if download_root and self._title:
+                    folder_path = os.path.join(download_root, self._title)
+                else:
+                    folder_path = download_root
             
             # Add to history
             if idea and style_text:

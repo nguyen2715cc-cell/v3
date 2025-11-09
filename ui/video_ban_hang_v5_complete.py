@@ -1902,9 +1902,18 @@ class VideoBanHangV5(QWidget):
             # Get genre (not directly available in VideoBanHang, use product content if available)
             genre = None
             
-            # Get folder path
+            # Get folder path - use project-specific folder
             folder_path = ""
-            if self.ed_download_path:
+            project_name = (self.ed_name.text() or "").strip()
+            if svc and project_name:
+                try:
+                    dirs = svc.ensure_project_dirs(project_name)
+                    folder_path = str(dirs["root"])
+                except Exception:
+                    pass
+            
+            # Fallback to ed_download_path if available
+            if not folder_path and self.ed_download_path:
                 folder_path = self.ed_download_path.text().strip()
             
             # Add to history
