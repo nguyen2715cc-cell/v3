@@ -115,9 +115,10 @@ def _truncate_prompt_smart(prompt: str, max_length: int = MAX_PROMPT_LENGTH) -> 
     
     Truncation strategy:
     1. If prompt is already within limits, return as-is
-    2. Remove verbose box-drawing characters and decorative formatting
-    3. Simplify directive sections while keeping key requirements
-    4. If still too long, preserve critical sections and truncate less important parts
+    2. Extract critical sections FIRST (before any modification)
+    3. Remove verbose box-drawing characters and decorative formatting from non-critical parts
+    4. Simplify directive sections while keeping key requirements
+    5. If still too long, preserve critical sections and truncate less important parts
     
     Args:
         prompt: The complete prompt text
@@ -130,6 +131,7 @@ def _truncate_prompt_smart(prompt: str, max_length: int = MAX_PROMPT_LENGTH) -> 
         return prompt
     
     # CRITICAL: Extract and preserve essential sections that must never be truncated
+    # DO THIS FIRST, before any text modification
     import re
     
     # Extract critical sections (these MUST be preserved)
@@ -170,7 +172,7 @@ def _truncate_prompt_smart(prompt: str, max_length: int = MAX_PROMPT_LENGTH) -> 
         # Emergency fallback: create minimal critical prompt
         minimal_prompt = ""
         
-        # Add minimal visual style enforcement
+        # Add minimal visual style enforcement (ALWAYS INCLUDE THIS!)
         if "anime" in prompt.lower() and "flat" in prompt.lower():
             minimal_prompt += (
                 "CRITICAL VISUAL STYLE: 2D Hand-Drawn Anime\n"
@@ -193,8 +195,18 @@ def _truncate_prompt_smart(prompt: str, max_length: int = MAX_PROMPT_LENGTH) -> 
         return minimal_prompt[:max_length]
     
     # Remove decorative box-drawing characters and excessive formatting
-    # These add visual appeal but consume many characters without adding semantic value
+    # BUT preserve the original critical sections
     simplified = prompt
+    
+    # Remove critical sections temporarily so we don't modify them
+    if visual_style_section:
+        simplified = simplified.replace(visual_style_section, "<<<VISUAL_STYLE_PLACEHOLDER>>>")
+    if audio_section:
+        simplified = simplified.replace(audio_section, "<<<AUDIO_PLACEHOLDER>>>")
+    if character_section:
+        simplified = simplified.replace(character_section, "<<<CHARACTER_PLACEHOLDER>>>")
+    
+    # Now simplify the remaining content
     simplified = re.sub(r'[╔╗╚╝═║━┃┏┓┗┛─│┣┫┳┻╋]', '', simplified)
     
     # Simplify repeated section dividers
@@ -208,12 +220,20 @@ def _truncate_prompt_smart(prompt: str, max_length: int = MAX_PROMPT_LENGTH) -> 
     lines = [line.strip() for line in simplified.split('\n')]
     simplified = '\n'.join(line for line in lines if line)
     
+    # Restore critical sections in their original form
+    if visual_style_section:
+        simplified = simplified.replace("<<<VISUAL_STYLE_PLACEHOLDER>>>", visual_style_section)
+    if audio_section:
+        simplified = simplified.replace("<<<AUDIO_PLACEHOLDER>>>", audio_section)
+    if character_section:
+        simplified = simplified.replace("<<<CHARACTER_PLACEHOLDER>>>", character_section)
+    
     # If still too long after simplification, do progressive truncation
     if len(simplified) > max_length:
         # Strategy: Keep critical sections + scene action, truncate camera and negatives
         
         # Build final prompt with priorities:
-        # 1. Critical sections (visual style, audio, character)
+        # 1. Critical sections (visual style, audio, character) - ALWAYS INCLUDE
         # 2. Scene action
         # 3. Camera (truncate if needed)
         # 4. Negatives (truncate if needed)
@@ -221,26 +241,27 @@ def _truncate_prompt_smart(prompt: str, max_length: int = MAX_PROMPT_LENGTH) -> 
         final_parts = []
         remaining_space = max_length
         
-        # Add critical sections first
+        # Add critical sections first (HIGHEST PRIORITY - MUST BE INCLUDED)
         for section in [visual_style_section, audio_section, character_section]:
             if section and len(section) < remaining_space:
                 final_parts.append(section)
                 remaining_space -= len(section)
         
-        # Extract and add scene action
-        scene_match = re.search(r'SCENE ACTION:.*?(?=\n\nCAMERA:|\n\nAVOID:|$)', simplified, re.DOTALL)
+        # Extract and add scene action from the ORIGINAL prompt (not simplified)
+        # This ensures we get the full scene content
+        scene_match = re.search(r'SCENE ACTION:.*?(?=\n\nCAMERA:|\n\nAVOID:|$)', prompt, re.DOTALL)
         if scene_match and len(scene_match.group(0)) < remaining_space - 200:
             final_parts.append(scene_match.group(0))
             remaining_space -= len(scene_match.group(0))
         
         # Add camera if space allows
-        camera_match = re.search(r'CAMERA:.*?(?=\n\nAVOID:|$)', simplified, re.DOTALL)
+        camera_match = re.search(r'CAMERA:.*?(?=\n\nAVOID:|$)', prompt, re.DOTALL)
         if camera_match and len(camera_match.group(0)) < remaining_space - 100:
             final_parts.append(camera_match.group(0))
             remaining_space -= len(camera_match.group(0))
         
         # Add negatives (truncate if needed)
-        avoid_match = re.search(r'AVOID:.*$', simplified, re.DOTALL)
+        avoid_match = re.search(r'AVOID:.*$', prompt, re.DOTALL)
         if avoid_match:
             avoid_section = avoid_match.group(0)
             if len(avoid_section) > remaining_space:
