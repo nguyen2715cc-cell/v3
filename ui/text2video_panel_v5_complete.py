@@ -77,6 +77,7 @@ try:
     from ui.workers.video_worker import VideoGenerationWorker  # PR#7: Background video worker
     from ui.widgets.history_widget import HistoryWidget  # History tab widget
     from utils import config as cfg
+    from utils.filename_sanitizer import sanitize_project_name
 except ImportError as e:
     print(f"⚠️ Import warning: {e}")
     cfg = None
@@ -1534,7 +1535,8 @@ class Text2VideoPanelV5(QWidget):
                         "Vào tab Cài đặt để chọn 'Thư mục tải về' trước."
                     )
                     return
-                prj = os.path.join(root, self._title or "Project")
+                sanitized_title = sanitize_project_name(self._title or "Project")
+                prj = os.path.join(root, sanitized_title)
                 os.makedirs(prj, exist_ok=True)
                 payload["dir_videos"] = os.path.join(prj, "03_Videos")
                 os.makedirs(payload["dir_videos"], exist_ok=True)
@@ -1626,7 +1628,8 @@ class Text2VideoPanelV5(QWidget):
                 root = st.get("download_dir") or ""
                 if not root:
                     return
-                prj = os.path.join(root, self._title or "Project")
+                sanitized_title = sanitize_project_name(self._title or "Project")
+                prj = os.path.join(root, sanitized_title)
                 os.makedirs(prj, exist_ok=True)
                 payload["dir_videos"] = os.path.join(prj, "03_Videos")
                 os.makedirs(payload["dir_videos"], exist_ok=True)
@@ -2784,7 +2787,8 @@ class Text2VideoPanelV5(QWidget):
                 state = cfg.load()
                 download_root = state.get("download_root", "")
                 if download_root and self._title:
-                    folder_path = os.path.join(download_root, self._title)
+                    sanitized_title = sanitize_project_name(self._title)
+                    folder_path = os.path.join(download_root, sanitized_title)
                 else:
                     folder_path = download_root
             

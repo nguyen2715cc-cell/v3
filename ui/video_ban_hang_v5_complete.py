@@ -43,6 +43,7 @@ try:
     from ui.widgets.history_widget import HistoryWidget  # History tab widget
     from ui.workers.script_worker import ScriptWorker
     from utils.image_utils import convert_to_bytes
+    from utils.filename_sanitizer import sanitize_project_name
 except ImportError as e:
     print(f"⚠️ Import warning: {e}")
     sscript = None
@@ -1760,7 +1761,8 @@ class VideoBanHangV5(QWidget):
             dirs = svc.ensure_project_dirs(project_name)
             dir_videos = str(dirs["video"])
         else:
-            dir_videos = str(Path.home() / "Downloads" / project_name / "Video")
+            sanitized_name = sanitize_project_name(project_name)
+            dir_videos = str(Path.home() / "Downloads" / sanitized_name / "Video")
             Path(dir_videos).mkdir(parents=True, exist_ok=True)
 
         # Prepare payload for video worker
