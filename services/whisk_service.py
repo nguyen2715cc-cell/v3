@@ -19,14 +19,22 @@ def get_session_cookies() -> str:
     """
     Get session cookies from config
     Returns cookie string for requests
+    Uses Google Labs Flow tokens (same as bearer token)
     """
     from services.core.key_manager import get_all_keys
-    session_tokens = get_all_keys('session')
-    if not session_tokens:
-        raise WhiskError("No Whisk session token configured")
-
-    # Session token format: __Secure-next-auth.session-token=...
-    return f"__Secure-next-auth.session-token={session_tokens[0]}"
+    
+    # Use labs tokens (Google Labs Flow tokens) for session
+    labs_tokens = get_all_keys('labs')
+    if labs_tokens:
+        # Session token format: __Secure-next-auth.session-token=...
+        return f"__Secure-next-auth.session-token={labs_tokens[0]}"
+    
+    # Fall back to google keys if no labs tokens
+    google_keys = get_all_keys('google')
+    if google_keys:
+        return f"__Secure-next-auth.session-token={google_keys[0]}"
+    
+    raise WhiskError("No Whisk session token configured (labs/google API key required)")
 
 
 def get_bearer_token() -> str:
