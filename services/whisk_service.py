@@ -218,6 +218,7 @@ def run_image_recipe(
     recipe_media_inputs: list,
     workflow_id: str,
     session_id: str,
+    aspect_ratio: str = "IMAGE_ASPECT_RATIO_PORTRAIT",
     log_callback: Optional[Callable] = None
 ) -> Optional[bytes]:
     """
@@ -228,6 +229,7 @@ def run_image_recipe(
         recipe_media_inputs: List of uploaded media inputs
         workflow_id: Workflow UUID
         session_id: Session ID
+        aspect_ratio: Aspect ratio (IMAGE_ASPECT_RATIO_PORTRAIT, IMAGE_ASPECT_RATIO_SQUARE, etc.)
         log_callback: Optional logging callback
         
     Returns:
@@ -245,22 +247,30 @@ def run_image_recipe(
         
         headers = {
             "authorization": f"Bearer {bearer_token}",
-            "content-type": "application/json; charset=utf-8",
+            "content-type": "text/plain;charset=UTF-8",
             "origin": "https://labs.google",
             "referer": "https://labs.google/",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
         
+        # Generate random seed for image generation
+        import random
+        seed = random.randint(100000, 999999)
+        
+        # Correct payload structure matching Google Labs API
         payload = {
-            "imageRecipeInput": {
-                "prompt": prompt,
-                "recipeMediaInputs": recipe_media_inputs,
-                "aspectRatio": "ASPECT_RATIO_SQUARE"
-            },
             "clientContext": {
                 "workflowId": workflow_id,
+                "tool": "BACKBONE",
                 "sessionId": session_id
-            }
+            },
+            "seed": seed,
+            "imageModelSettings": {
+                "imageModel": "R2I",
+                "aspectRatio": aspect_ratio
+            },
+            "userInstruction": prompt,
+            "recipeMediaInputs": recipe_media_inputs
         }
         
         log("[INFO] Whisk: Running image recipe...")
@@ -327,7 +337,7 @@ def run_image_recipe(
 
 
 def generate_image(prompt: str, model_image: Optional[str] = None, product_image: Optional[str] = None, 
-                   debug_callback: Optional[Callable] = None) -> Optional[bytes]:
+                   aspect_ratio: str = "IMAGE_ASPECT_RATIO_PORTRAIT", debug_callback: Optional[Callable] = None) -> Optional[bytes]:
     """
     Generate image using Whisk with reference images
     
@@ -340,6 +350,7 @@ def generate_image(prompt: str, model_image: Optional[str] = None, product_image
         prompt: Text prompt
         model_image: Path to model/character reference image
         product_image: Path to product reference image
+        aspect_ratio: Aspect ratio (IMAGE_ASPECT_RATIO_PORTRAIT, IMAGE_ASPECT_RATIO_SQUARE, IMAGE_ASPECT_RATIO_LANDSCAPE)
         debug_callback: Callback for debug logging
         
     Returns:
@@ -408,6 +419,7 @@ def generate_image(prompt: str, model_image: Optional[str] = None, product_image
             recipe_media_inputs=recipe_media_inputs,
             workflow_id=workflow_id,
             session_id=session_id,
+            aspect_ratio=aspect_ratio,
             log_callback=log
         )
         
