@@ -114,6 +114,80 @@ def _extract_negative_prompt(prompt_data: Any) -> str:
             return ", ".join(str(neg) for neg in negatives)
     return "text, words, letters, subtitles, captions, titles, credits, on-screen text, watermarks, logos, brands, camera shake, fisheye, photorealistic, live action, 3D CGI, Disney 3D, Pixar style"
 
+def _truncate_prompt_smart(prompt: str, max_length: int = MAX_PROMPT_LENGTH) -> str:
+    """
+    Intelligently truncate prompt to fit within API limits while preserving critical information.
+    
+    Truncation strategy:
+    1. If prompt is already within limits, return as-is
+    2. Remove verbose box-drawing characters and decorative formatting
+    3. Simplify directive sections while keeping key requirements
+    4. If still too long, extract most critical information
+    
+    Args:
+        prompt: The complete prompt text
+        max_length: Maximum allowed length (default: MAX_PROMPT_LENGTH)
+    
+    Returns:
+        Truncated prompt that fits within max_length
+    """
+    if len(prompt) <= max_length:
+        return prompt
+    
+    # Remove decorative box-drawing characters and excessive formatting
+    # These add visual appeal but consume many characters without adding semantic value
+    import re
+    
+    # Replace box-drawing characters with simpler markers
+    simplified = prompt
+    simplified = re.sub(r'[╔╗╚╝═║━┃┏┓┗┛─│┣┫┳┻╋]', '', simplified)
+    
+    # Simplify repeated section dividers
+    simplified = re.sub(r'-{10,}', '---', simplified)
+    simplified = re.sub(r'={10,}', '===', simplified)
+    
+    # Remove excessive newlines (keep max 2 consecutive)
+    simplified = re.sub(r'\n{3,}', '\n\n', simplified)
+    
+    # Remove leading/trailing whitespace from each line
+    lines = [line.strip() for line in simplified.split('\n')]
+    simplified = '\n'.join(line for line in lines if line)
+    
+    # If still too long after simplification, do progressive truncation
+    if len(simplified) > max_length:
+        # Strategy: Keep the most important sections in order of priority
+        # 1. Keep everything up to max_length but try to break at a natural boundary
+        
+        # Try to find a good breaking point (section boundary, paragraph, etc.)
+        truncation_point = max_length - 100  # Leave some buffer
+        
+        # Look for a section break near the truncation point
+        search_start = max(0, truncation_point - 500)
+        search_end = min(len(simplified), truncation_point + 100)
+        search_area = simplified[search_start:search_end]
+        
+        # Find the last double newline (section break) in the search area
+        last_section_break = search_area.rfind('\n\n')
+        if last_section_break > 0:
+            # Truncate at the section break
+            actual_break = search_start + last_section_break
+            simplified = simplified[:actual_break].strip()
+        else:
+            # No section break found, look for last sentence
+            last_period = search_area.rfind('. ')
+            if last_period > 0:
+                actual_break = search_start + last_period + 1
+                simplified = simplified[:actual_break].strip()
+            else:
+                # Just do a hard truncate with ellipsis
+                simplified = simplified[:max_length - 50].strip() + "...[truncated]"
+        
+        # Final safety check
+        if len(simplified) > max_length:
+            simplified = simplified[:max_length - 20] + "...[truncated]"
+    
+    return simplified
+
 def _build_complete_prompt_text(prompt_data: Any) -> str:
     """
     Build a COMPLETE text prompt from JSON structure.
@@ -698,6 +772,20 @@ class LabsFlowClient:
         else:
             prompt = str(sanitized_prompt_data)
         
+        # ═══════════════════════════════════════════════════════════════
+        # PROMPT LENGTH VALIDATION: Ensure prompt fits within API limits
+        # This prevents HTTP 400 "Request contains an invalid argument" errors
+        # ═══════════════════════════════════════════════════════════════
+        original_length = len(prompt)
+        prompt = _truncate_prompt_smart(prompt, max_length=MAX_PROMPT_LENGTH)
+        
+        # Emit warning if prompt was truncated
+        if len(prompt) < original_length:
+            self._emit("prompt_truncated", 
+                      original_length=original_length, 
+                      truncated_length=len(prompt),
+                      max_allowed=MAX_PROMPT_LENGTH)
+        
         # Extract negative prompt
         negative_prompt = _extract_negative_prompt(original_prompt_data)
 
@@ -950,6 +1038,10 @@ class LabsFlowClient:
                 prompt_text = prompt
         else:
             prompt_text = str(prompt)
+        
+        # Validate and truncate prompt to fit within API limits
+        # This prevents HTTP 400 "Request contains an invalid argument" errors
+        prompt_text = _truncate_prompt_smart(prompt_text, max_length=MAX_PROMPT_LENGTH)
         
         # Build Google Labs API format request
         requests_list = []
