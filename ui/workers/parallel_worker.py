@@ -174,9 +174,11 @@ class ParallelSeqWorker(QObject):
                         project_id=account_project_id
                     )
 
-                    # CRITICAL FIX: Store account name so CheckWorker can use correct client
+                    # CRITICAL FIX: Store account name and bearer token so CheckWorker can use correct client
                     # Each operation must be checked with the same account that created it
+                    # Store bearer token for video downloads (multi-account fix)
                     job["account_name"] = account.name
+                    job["bearer_token"] = account.tokens[0] if account.tokens else None
 
                     self.log.emit("HTTP", f"{thread_name}: START OK -> {rc} ref(s)")
 

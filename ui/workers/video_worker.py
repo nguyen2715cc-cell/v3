@@ -98,10 +98,20 @@ class VideoGenerationWorker(QThread):
             detail = event.get("detail", "")
             self.log.emit(f"[ERROR] HTTP {code}: {detail}")
 
-    def _download(self, url, dst_path):
-        """Download video from URL."""
+    def _download(self, url, dst_path, bearer_token=None):
+        """
+        Download video from URL with optional bearer token authentication.
+        
+        Args:
+            url: Video URL to download
+            dst_path: Destination path for downloaded file
+            bearer_token: Optional bearer token for authentication (required for multi-account)
+        
+        Returns:
+            True if download succeeded, False otherwise
+        """
         try:
-            self.video_downloader.download(url, dst_path)
+            self.video_downloader.download(url, dst_path, bearer_token=bearer_token)
             return True
         except Exception as e:
             self.log.emit(f"[ERR] Download fail: {e}")
@@ -442,8 +452,11 @@ class VideoGenerationWorker(QThread):
 
                         self.log.emit(f"[INFO] Downloading scene {scene} copy {copy_num}...")
 
+                        # Get bearer token for multi-account download support
+                        bearer_token = job_dict.get("bearer_token")
+
                         try:
-                            if self._download(video_url, fp):
+                            if self._download(video_url, fp, bearer_token=bearer_token):
                                 card["status"] = "DOWNLOADED"
                                 card["path"] = fp
 

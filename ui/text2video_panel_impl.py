@@ -934,9 +934,20 @@ class _Worker(QObject):
         self.log.emit("[INFO] Hoàn tất sinh kịch bản & lưu file.")
         self.story_done.emit(data, ctx)
 
-    def _download(self, url, dst_path):
+    def _download(self, url, dst_path, bearer_token=None):
+        """
+        Download video with optional bearer token authentication.
+        
+        Args:
+            url: Video URL to download
+            dst_path: Destination path for downloaded file
+            bearer_token: Optional bearer token for authentication (required for multi-account)
+        
+        Returns:
+            True if download succeeded, False otherwise
+        """
         try:
-            self.video_downloader.download(url, dst_path)
+            self.video_downloader.download(url, dst_path, bearer_token=bearer_token)
             return True
         except Exception as e:
             self.log.emit(f"[ERR] Download fail: {e}")
@@ -1136,8 +1147,11 @@ class _Worker(QObject):
 
                         self.log.emit(f"[INFO] Downloading scene {scene} copy {copy_num}...")
 
+                        # Get bearer token for multi-account download support
+                        bearer_token = job_dict.get("bearer_token")
+
                         try:
-                            if self._download(video_url, fp):
+                            if self._download(video_url, fp, bearer_token=bearer_token):
                                 card["status"] = "DOWNLOADED"
                                 card["path"] = fp
 
@@ -1626,7 +1640,10 @@ class _Worker(QObject):
                                 out_name = f"scene_{scene:03d}_copy_{copy_num:02d}.mp4"
                                 dst_path = os.path.join(dir_videos, out_name)
 
-                                if self._download(video_url, dst_path):
+                                # Get bearer token for multi-account download support
+                                bearer_token = job_dict.get("bearer_token")
+
+                                if self._download(video_url, dst_path, bearer_token=bearer_token):
                                     card["path"] = dst_path
                                     card["status"] = "DOWNLOADED"
 
