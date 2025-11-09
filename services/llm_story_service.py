@@ -66,30 +66,54 @@ def _detect_animal_content(idea, topic=None):
         return True
     
     # Common animal-related keywords in Vietnamese and English
+    # Use word boundaries for better matching
     animal_keywords = [
-        # Vietnamese
-        "động vật", "thú", "chim", "cá", "sư tử", "hổ", "voi", "khỉ", "gấu", "cáo", "chó sói",
-        "hươu", "nai", "chuột", "thỏ", "mèo hoang", "chó hoang", "bò", "ngựa", "dê", "cừu",
-        "gà", "vịt", "ngỗng", "chim cánh cụt", "đại bàng", "diều hâu", "cú", "chim ưng",
-        "cá heo", "cá voi", "cá mập", "bạch tuộc", "mực", "rùa biển", "hải cẩu", "sư tử biển",
+        # Vietnamese - specific animals
+        "động vật", "thú hoang", "thú cưng", "thú nuôi",
+        "sư tử", "hổ", "voi", "khỉ", "gấu", "cáo", "chó sói",
+        "hươu", "nai", "chuột", "thỏ", "chó hoang", "mèo hoang",
+        "chim cánh cụt", "đại bàng", "diều hâu", "chim ưng",
+        "cá heo", "cá voi", "cá mập", "bạch tuộc", "rùa biển", "hải cẩu", "sư tử biển",
         "rắn", "trăn", "thằn lằn", "cá sấu", "kỳ đà", "rồng komodo",
-        "côn trùng", "bướm", "ong", "kiến", "nhện", "bọ cánh cứng",
-        "thú hoang", "động vật hoang dã", "sinh vật", "loài vật", "bầy", "đàn", "bầy đàn",
+        "côn trùng", "bướm", "nhện",
+        "động vật hoang dã", "sinh vật hoang dã", "loài vật", "bầy đàn",
         "tự nhiên hoang dã", "thiên nhiên hoang dã", "thế giới động vật",
+        "chó", "mèo", "chó con", "mèo con", "cún", "miu",
         # English
-        "animal", "wildlife", "creature", "beast", "fauna", "species",
+        "wildlife", "wild animal", "nature documentary",
         "lion", "tiger", "elephant", "monkey", "bear", "fox", "wolf",
-        "deer", "rabbit", "mouse", "rat", "wild cat", "wild dog", "cattle", "horse",
-        "bird", "eagle", "hawk", "owl", "penguin", "duck", "goose",
-        "dolphin", "whale", "shark", "octopus", "squid", "sea turtle", "seal", "sea lion",
+        "deer", "rabbit", "wild cat", "wild dog",
+        "eagle", "hawk", "owl", "penguin",
+        "dolphin", "whale", "shark", "octopus", "sea turtle", "seal", "sea lion",
         "snake", "python", "lizard", "crocodile", "alligator", "komodo dragon",
-        "insect", "butterfly", "bee", "ant", "spider", "beetle",
-        "wild animal", "pack", "herd", "flock", "pride", "nature documentary",
+        "butterfly", "spider",
+        "pack", "herd", "flock", "pride",
+        # Pets
+        "puppy", "kitten", "dog", "cat", "pet",
     ]
     
-    # Normalize and check
+    # Normalize and check with word boundaries
     idea_lower = idea.lower()
-    return any(keyword in idea_lower for keyword in animal_keywords)
+    
+    # Special case: exclude "python" if it's in a programming context
+    if "python" in idea_lower and any(prog_word in idea_lower for prog_word in ["lập trình", "programming", "code", "tutorial", "học"]):
+        # This is about Python programming, not python snake
+        pass
+    else:
+        # Check for "python" as the snake
+        if " python " in f" {idea_lower} ":
+            return True
+    
+    # Use more precise matching - check if keyword appears as separate word or with spaces
+    for keyword in animal_keywords:
+        # Skip "python" as it's handled above
+        if keyword == "python":
+            continue
+        # Check if keyword exists with word boundaries (spaces, start/end of string)
+        if f" {keyword} " in f" {idea_lower} " or idea_lower.startswith(f"{keyword} ") or idea_lower.endswith(f" {keyword}"):
+            return True
+    
+    return False
 
 
 def _get_style_specific_guidance(style, idea=None, topic=None):
