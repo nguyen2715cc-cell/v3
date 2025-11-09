@@ -113,6 +113,27 @@ BTN_DANGER = """
 """
 
 # Workers (từ original)
+
+def convert_aspect_ratio_to_whisk(ratio: str) -> str:
+    """
+    Convert aspect ratio from '9:16' format to Whisk API format
+    
+    Args:
+        ratio: Aspect ratio in format '9:16', '16:9', '1:1', etc.
+        
+    Returns:
+        Whisk API aspect ratio constant
+    """
+    ratio_map = {
+        '9:16': 'IMAGE_ASPECT_RATIO_PORTRAIT',
+        '16:9': 'IMAGE_ASPECT_RATIO_LANDSCAPE',
+        '1:1': 'IMAGE_ASPECT_RATIO_SQUARE',
+        '4:3': 'IMAGE_ASPECT_RATIO_LANDSCAPE',
+        '3:4': 'IMAGE_ASPECT_RATIO_PORTRAIT',
+    }
+    return ratio_map.get(ratio, 'IMAGE_ASPECT_RATIO_PORTRAIT')
+
+
 class ImageGenerationWorker(QThread):
     """Worker thread for generating images"""
     progress = pyqtSignal(str)
@@ -157,6 +178,7 @@ class ImageGenerationWorker(QThread):
 
             aspect_ratio = self.cfg.get('ratio', '9:16')
             model = 'gemini' if 'Gemini' in self.cfg.get('image_model', 'Gemini') else 'imagen_4'
+            whisk_aspect_ratio = convert_aspect_ratio_to_whisk(aspect_ratio)
 
             self.progress.emit(f"[INFO] Sequential mode: {len(api_keys)} API keys, model: {model}")
 
@@ -193,6 +215,7 @@ class ImageGenerationWorker(QThread):
                             prompt=prompt,
                             model_image=self.model_paths[0] if self.model_paths else None,
                             product_image=self.prod_paths[0] if self.prod_paths else None,
+                            aspect_ratio=whisk_aspect_ratio,
                             debug_callback=self.progress.emit,
                         )
                         if img_data:
@@ -305,6 +328,7 @@ class ImageGenerationWorker(QThread):
 
             aspect_ratio = self.cfg.get('ratio', '9:16')
             model = 'gemini' if 'Gemini' in self.cfg.get('image_model', 'Gemini') else 'imagen_4'
+            whisk_aspect_ratio = convert_aspect_ratio_to_whisk(aspect_ratio)
 
             if self.character_bible and hasattr(self.character_bible, 'characters'):
                 char_count = len(self.character_bible.characters)
@@ -331,7 +355,7 @@ class ImageGenerationWorker(QThread):
 
                 thread = threading.Thread(
                     target=self._process_image_batch,
-                    args=(account.tokens, batch, model, aspect_ratio, results_queue, i),
+                    args=(account.tokens, batch, model, aspect_ratio, whisk_aspect_ratio, results_queue, i),
                     daemon=True,
                     name=f"ImageGen-{account.name}"
                 )
@@ -377,7 +401,7 @@ class ImageGenerationWorker(QThread):
             self.progress.emit(f"Lỗi parallel: {e}")
             self.finished.emit(False)
 
-    def _process_image_batch(self, api_keys, batch, model, aspect_ratio, results_queue, thread_id):
+    def _process_image_batch(self, api_keys, batch, model, aspect_ratio, whisk_aspect_ratio, results_queue, thread_id):
         """Process a batch of scenes in a thread"""
         try:
             for scene_idx, scene in batch:
@@ -405,6 +429,7 @@ class ImageGenerationWorker(QThread):
                             prompt=prompt,
                             model_image=self.model_paths[0] if self.model_paths else None,
                             product_image=self.prod_paths[0] if self.prod_paths else None,
+                            aspect_ratio=whisk_aspect_ratio,
                             debug_callback=None,
                         )
                     except Exception as e:
