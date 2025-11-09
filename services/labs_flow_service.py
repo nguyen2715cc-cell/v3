@@ -262,6 +262,12 @@ def _build_complete_prompt_text(prompt_data: Any) -> str:
     
     CRITICAL: Order matters! API reads top→bottom, so most important
     requirements MUST be at the top.
+    
+    PRIORITY ORDER (most important first):
+    1. VISUAL STYLE LOCK - Determines anime vs realistic (MOST CRITICAL)
+    2. CHARACTER IDENTITY LOCK - Character consistency
+    3. AUDIO REQUIREMENTS - Language and voiceover
+    4. Scene content and other details
     """
     # If already a string, return as-is (backward compatibility)
     if isinstance(prompt_data, str):
@@ -274,125 +280,15 @@ def _build_complete_prompt_text(prompt_data: Any) -> str:
     sections = []
 
     # ═══════════════════════════════════════════════════════════════
-    # SECTION 0A: CHARACTER IDENTITY LOCK (CoT + RCoT - ABSOLUTE TOP!)
-    # Issue #41: Extremely detailed character descriptions MUST be first
-    # for maximum consistency across all scenes in multi-scene videos
-    # ═══════════════════════════════════════════════════════════════
-    character_details = prompt_data.get("character_details", "")
-    if character_details and "CRITICAL" in character_details:
-        # Extract character names and details for identity lock
-        identity_lock = (
-            "╔═══════════════════════════════════════════════════════════╗\n"
-            "║  CHARACTER IDENTITY LOCK (CoT + RCoT TECHNIQUE)          ║\n"
-            "║  THIS SECTION MUST NEVER BE IGNORED OR MODIFIED          ║\n"
-            "╚═══════════════════════════════════════════════════════════╝\n\n"
-            f"{character_details}\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "NEVER CHANGE DIRECTIVES (10 CRITICAL RULES):\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "1. NEVER change character facial features (eyes, nose, mouth, face shape)\n"
-            "2. NEVER change character hairstyle, hair color, or hair length\n"
-            "3. NEVER change character outfit, clothing colors, or accessories\n"
-            "4. NEVER change character body type, height, or build\n"
-            "5. NEVER change character skin tone or complexion\n"
-            "6. NEVER add or remove character accessories (jewelry, glasses, etc.)\n"
-            "7. NEVER change character age or apparent age\n"
-            "8. NEVER swap characters with different people\n"
-            "9. NEVER modify character proportions or physical characteristics\n"
-            "10. NEVER introduce new characters not listed above\n\n"
-            "CONSISTENCY ENFORCEMENT:\n"
-            "✓ Use EXACT SAME character appearance in ALL scenes\n"
-            "✓ Maintain IDENTICAL visual identity across entire video\n"
-            "✓ Keep ALL physical features UNCHANGED throughout\n"
-            "✓ Preserve character design from scene 1 to final scene\n"
-            "╔═══════════════════════════════════════════════════════════╗\n"
-            "║  END OF CHARACTER IDENTITY LOCK                          ║\n"
-            "╚═══════════════════════════════════════════════════════════╝"
-        )
-        sections.append(identity_lock)
-
-    # ═══════════════════════════════════════════════════════════════
-    # SECTION 0B: VOICEOVER LANGUAGE (TOP PRIORITY - ENHANCED)
-    # Issue #2: Strengthen voiceover/dialogue instructions
-    # ═══════════════════════════════════════════════════════════════
-    audio = prompt_data.get("audio", {})
-    if isinstance(audio, dict):
-        voiceover = audio.get("voiceover", {})
-        if isinstance(voiceover, dict):
-            vo_lang = voiceover.get("language", "")
-            vo_text = voiceover.get("text", "")
-            tts_provider = voiceover.get("tts_provider", "")
-            voice_id = voiceover.get("voice_id", "")
-            voice_name = voiceover.get("voice_name", "")
-            speaking_style = voiceover.get("speaking_style", "")
-
-            if vo_lang and vo_text:
-                # Map language codes to full names
-                lang_name_map = {
-                    'vi': 'Vietnamese', 'en': 'English', 'ja': 'Japanese',
-                    'ko': 'Korean', 'zh': 'Chinese', 'fr': 'French',
-                    'de': 'German', 'es': 'Spanish', 'ru': 'Russian',
-                    'th': 'Thai', 'id': 'Indonesian'
-                }
-                lang_name = lang_name_map.get(vo_lang, vo_lang.upper())
-
-                # CRITICAL: Enhanced voice directive with stronger instructions
-                voice_directive = (
-                    f"╔═══════════════════════════════════════════════════════════╗\n"
-                    f"║  CRITICAL AUDIO REQUIREMENT (ABSOLUTE TOP PRIORITY)      ║\n"
-                    f"║  THIS SECTION MUST NEVER BE IGNORED OR SKIPPED           ║\n"
-                    f"╚═══════════════════════════════════════════════════════════╝\n\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"VOICE & DIALOGUE REQUIREMENTS (10 CRITICAL RULES):\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"1. ALL spoken dialogue MUST be in {lang_name} ({vo_lang})\n"
-                    f"2. ALL voiceover narration MUST be in {lang_name} ({vo_lang})\n"
-                    f"3. NEVER use any language other than {lang_name} for voice\n"
-                    f"4. Text-to-speech engine MUST use {lang_name} ({vo_lang}) model\n"
-                    f"5. Character dialogue MUST be audible and clear\n"
-                    f"6. Voiceover MUST be synchronized with video timing\n"
-                    f"7. Audio levels MUST be balanced and professional\n"
-                    f"8. Background music MUST NOT overpower the voice\n"
-                    f"9. Voice tone and emotion MUST match the scene content\n"
-                    f"10. INCLUDE voiceover audio - do NOT create silent video\n\n"
-                    f"VOICE CONFIGURATION:\n"
-                    f"- Language: {lang_name} ({vo_lang})\n"
-                )
-                
-                if tts_provider:
-                    voice_directive += f"- TTS Provider: {tts_provider}\n"
-                if voice_id:
-                    voice_directive += f"- Voice ID: {voice_id}\n"
-                if voice_name:
-                    voice_directive += f"- Voice Name: {voice_name}\n"
-                if speaking_style:
-                    voice_directive += f"- Speaking Style: {speaking_style}\n"
-                
-                voice_directive += (
-                    f"\n📢 VOICEOVER TEXT (MUST BE SPOKEN IN {lang_name}):\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"\"{vo_text}\"\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"⚠️  AUDIO ENFORCEMENT:\n"
-                    f"✓ Generate voiceover audio with the EXACT text above\n"
-                    f"✓ Use {lang_name} ({vo_lang}) TTS engine ONLY\n"
-                    f"✓ Ensure voice is clear, natural, and emotionally appropriate\n"
-                    f"✓ Match voice prosody (rate, pitch, emotion) to scene context\n"
-                    f"✓ DO NOT create a silent video - audio is MANDATORY\n"
-                    f"✓ DO NOT use English or any other language for voiceover\n\n"
-                    f"╔═══════════════════════════════════════════════════════════╗\n"
-                    f"║  END OF CRITICAL AUDIO REQUIREMENT                       ║\n"
-                    f"╚═══════════════════════════════════════════════════════════╝"
-                )
-                sections.append(voice_directive)
-
-    # ═══════════════════════════════════════════════════════════════
-    # SECTION 1: VISUAL STYLE LOCK (PR #8 - Enhanced style consistency)
+    # SECTION 0: VISUAL STYLE LOCK (ABSOLUTE TOP PRIORITY!)
+    # FIX: Visual style MUST be first because if the style is wrong
+    # (anime vs realistic), the entire video is wrong. Character and
+    # audio are secondary to getting the base visual style correct.
     # ═══════════════════════════════════════════════════════════════
     constraints = prompt_data.get("constraints", {})
     visual_style_tags = constraints.get("visual_style_tags", [])
     
-    # Extract style_seed from generation params (PR #8)
+    # Extract style_seed from generation params
     generation_params = prompt_data.get("generation", {})
     style_seed = generation_params.get("style_seed")
 
@@ -452,8 +348,7 @@ def _build_complete_prompt_text(prompt_data: Any) -> str:
             main_style = "Cinematic Film Style"
             is_realistic_style = True
 
-        # Build VISUAL STYLE LOCK section (similar to CHARACTER IDENTITY LOCK)
-        # Issue #1: Enhanced with stronger anime/visual style enforcement
+        # Build VISUAL STYLE LOCK section
         style_lock = (
             "╔═══════════════════════════════════════════════════════════╗\n"
             "║  VISUAL STYLE LOCK (ABSOLUTE CRITICAL PRIORITY)          ║\n"
@@ -692,8 +587,120 @@ def _build_complete_prompt_text(prompt_data: Any) -> str:
         sections.append(style_lock)
 
     # ═══════════════════════════════════════════════════════════════
-    # SECTION 2: CHARACTER CONSISTENCY
-    # Note: Main character details now in IDENTITY LOCK at top (Issue #41)
+    # SECTION 1: CHARACTER IDENTITY LOCK (CoT + RCoT)
+    # Issue #41: Extremely detailed character descriptions for consistency
+    # ═══════════════════════════════════════════════════════════════
+    character_details = prompt_data.get("character_details", "")
+    if character_details and "CRITICAL" in character_details:
+        # Extract character names and details for identity lock
+        identity_lock = (
+            "╔═══════════════════════════════════════════════════════════╗\n"
+            "║  CHARACTER IDENTITY LOCK (CoT + RCoT TECHNIQUE)          ║\n"
+            "║  THIS SECTION MUST NEVER BE IGNORED OR MODIFIED          ║\n"
+            "╚═══════════════════════════════════════════════════════════╝\n\n"
+            f"{character_details}\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "NEVER CHANGE DIRECTIVES (10 CRITICAL RULES):\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "1. NEVER change character facial features (eyes, nose, mouth, face shape)\n"
+            "2. NEVER change character hairstyle, hair color, or hair length\n"
+            "3. NEVER change character outfit, clothing colors, or accessories\n"
+            "4. NEVER change character body type, height, or build\n"
+            "5. NEVER change character skin tone or complexion\n"
+            "6. NEVER add or remove character accessories (jewelry, glasses, etc.)\n"
+            "7. NEVER change character age or apparent age\n"
+            "8. NEVER swap characters with different people\n"
+            "9. NEVER modify character proportions or physical characteristics\n"
+            "10. NEVER introduce new characters not listed above\n\n"
+            "CONSISTENCY ENFORCEMENT:\n"
+            "✓ Use EXACT SAME character appearance in ALL scenes\n"
+            "✓ Maintain IDENTICAL visual identity across entire video\n"
+            "✓ Keep ALL physical features UNCHANGED throughout\n"
+            "✓ Preserve character design from scene 1 to final scene\n"
+            "╔═══════════════════════════════════════════════════════════╗\n"
+            "║  END OF CHARACTER IDENTITY LOCK                          ║\n"
+            "╚═══════════════════════════════════════════════════════════╝"
+        )
+        sections.append(identity_lock)
+
+    # ═══════════════════════════════════════════════════════════════
+    # SECTION 2: VOICEOVER LANGUAGE (ENHANCED)
+    # Issue #2: Strengthen voiceover/dialogue instructions
+    # ═══════════════════════════════════════════════════════════════
+    audio = prompt_data.get("audio", {})
+    if isinstance(audio, dict):
+        voiceover = audio.get("voiceover", {})
+        if isinstance(voiceover, dict):
+            vo_lang = voiceover.get("language", "")
+            vo_text = voiceover.get("text", "")
+            tts_provider = voiceover.get("tts_provider", "")
+            voice_id = voiceover.get("voice_id", "")
+            voice_name = voiceover.get("voice_name", "")
+            speaking_style = voiceover.get("speaking_style", "")
+
+            if vo_lang and vo_text:
+                # Map language codes to full names
+                lang_name_map = {
+                    'vi': 'Vietnamese', 'en': 'English', 'ja': 'Japanese',
+                    'ko': 'Korean', 'zh': 'Chinese', 'fr': 'French',
+                    'de': 'German', 'es': 'Spanish', 'ru': 'Russian',
+                    'th': 'Thai', 'id': 'Indonesian'
+                }
+                lang_name = lang_name_map.get(vo_lang, vo_lang.upper())
+
+                # CRITICAL: Enhanced voice directive with stronger instructions
+                voice_directive = (
+                    f"╔═══════════════════════════════════════════════════════════╗\n"
+                    f"║  CRITICAL AUDIO REQUIREMENT (ABSOLUTE TOP PRIORITY)      ║\n"
+                    f"║  THIS SECTION MUST NEVER BE IGNORED OR SKIPPED           ║\n"
+                    f"╚═══════════════════════════════════════════════════════════╝\n\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"VOICE & DIALOGUE REQUIREMENTS (10 CRITICAL RULES):\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"1. ALL spoken dialogue MUST be in {lang_name} ({vo_lang})\n"
+                    f"2. ALL voiceover narration MUST be in {lang_name} ({vo_lang})\n"
+                    f"3. NEVER use any language other than {lang_name} for voice\n"
+                    f"4. Text-to-speech engine MUST use {lang_name} ({vo_lang}) model\n"
+                    f"5. Character dialogue MUST be audible and clear\n"
+                    f"6. Voiceover MUST be synchronized with video timing\n"
+                    f"7. Audio levels MUST be balanced and professional\n"
+                    f"8. Background music MUST NOT overpower the voice\n"
+                    f"9. Voice tone and emotion MUST match the scene content\n"
+                    f"10. INCLUDE voiceover audio - do NOT create silent video\n\n"
+                    f"VOICE CONFIGURATION:\n"
+                    f"- Language: {lang_name} ({vo_lang})\n"
+                )
+                
+                if tts_provider:
+                    voice_directive += f"- TTS Provider: {tts_provider}\n"
+                if voice_id:
+                    voice_directive += f"- Voice ID: {voice_id}\n"
+                if voice_name:
+                    voice_directive += f"- Voice Name: {voice_name}\n"
+                if speaking_style:
+                    voice_directive += f"- Speaking Style: {speaking_style}\n"
+                
+                voice_directive += (
+                    f"\n📢 VOICEOVER TEXT (MUST BE SPOKEN IN {lang_name}):\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"\"{vo_text}\"\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"⚠️  AUDIO ENFORCEMENT:\n"
+                    f"✓ Generate voiceover audio with the EXACT text above\n"
+                    f"✓ Use {lang_name} ({vo_lang}) TTS engine ONLY\n"
+                    f"✓ Ensure voice is clear, natural, and emotionally appropriate\n"
+                    f"✓ Match voice prosody (rate, pitch, emotion) to scene context\n"
+                    f"✓ DO NOT create a silent video - audio is MANDATORY\n"
+                    f"✓ DO NOT use English or any other language for voiceover\n\n"
+                    f"╔═══════════════════════════════════════════════════════════╗\n"
+                    f"║  END OF CRITICAL AUDIO REQUIREMENT                       ║\n"
+                    f"╚═══════════════════════════════════════════════════════════╝"
+                )
+                sections.append(voice_directive)
+
+    # ═══════════════════════════════════════════════════════════════
+    # SECTION 3: CHARACTER CONSISTENCY (BACKUP)
+    # Note: Main character details now in CHARACTER IDENTITY LOCK (Section 1)
     # This section kept for backward compatibility with non-critical characters
     # ═══════════════════════════════════════════════════════════════
     # Skip if already added to IDENTITY LOCK section
@@ -702,7 +709,7 @@ def _build_complete_prompt_text(prompt_data: Any) -> str:
         sections.append(f"CHARACTER CONSISTENCY:\n{character_details_backup}")
 
     # ═══════════════════════════════════════════════════════════════
-    # SECTION 3: HARD LOCKS (existing, unchanged)
+    # SECTION 4: HARD LOCKS (existing, unchanged)
     # ═══════════════════════════════════════════════════════════════
     hard_locks = prompt_data.get("hard_locks", {})
     if hard_locks:
@@ -714,14 +721,14 @@ def _build_complete_prompt_text(prompt_data: Any) -> str:
             sections.append("CONSISTENCY REQUIREMENTS:\n" + "\n".join(locks))
 
     # ═══════════════════════════════════════════════════════════════
-    # SECTION 4: SETTING DETAILS (existing, unchanged)
+    # SECTION 5: SETTING DETAILS (existing, unchanged)
     # ═══════════════════════════════════════════════════════════════
     setting_details = prompt_data.get("setting_details", "")
     if setting_details:
         sections.append(f"SETTING: {setting_details}")
 
     # ═══════════════════════════════════════════════════════════════
-    # SECTION 5: SCENE ACTION (with character & style reminders)
+    # SECTION 6: SCENE ACTION (with character & style reminders)
     # Triple Reinforcement #2: Prepend character and style reminders
     # ═══════════════════════════════════════════════════════════════
     key_action = prompt_data.get("key_action", "")
@@ -779,7 +786,7 @@ def _build_complete_prompt_text(prompt_data: Any) -> str:
         sections.append(f"SCENE ACTION:\n{style_reminder}{character_reminder}{key_action}")
 
     # ═══════════════════════════════════════════════════════════════
-    # SECTION 6: CAMERA DIRECTION (existing, unchanged)
+    # SECTION 7: CAMERA DIRECTION (existing, unchanged)
     # ═══════════════════════════════════════════════════════════════
     camera_dir = prompt_data.get("camera_direction", [])
     if isinstance(camera_dir, list) and camera_dir:
@@ -797,7 +804,7 @@ def _build_complete_prompt_text(prompt_data: Any) -> str:
     # Its content (voice + style) is now at top as critical sections
 
     # ═══════════════════════════════════════════════════════════════
-    # SECTION 7: NEGATIVES (Enhanced with character & style consistency)
+    # SECTION 8: NEGATIVES (Enhanced with character & style consistency)
     # Triple Reinforcement #3: Add character and style consistency negatives
     # ═══════════════════════════════════════════════════════════════
     negatives = prompt_data.get("negatives", [])
