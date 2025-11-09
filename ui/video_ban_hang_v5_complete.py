@@ -178,7 +178,8 @@ class ImageGenerationWorker(QThread):
                 return
 
             aspect_ratio = self.cfg.get('ratio', '9:16')
-            model = 'gemini' if 'Gemini' in self.cfg.get('image_model', 'Gemini') else 'imagen_4'
+            # Use gemini as fallback model (UI only has Gemini/Whisk options)
+            model = 'gemini'
             whisk_aspect_ratio = convert_aspect_ratio_to_whisk(aspect_ratio)
 
             self.progress.emit(f"[INFO] Sequential mode: {len(api_keys)} API keys, model: {model}")
@@ -328,7 +329,8 @@ class ImageGenerationWorker(QThread):
             self.progress.emit(f"🚀 Parallel mode: {num_accounts} accounts")
 
             aspect_ratio = self.cfg.get('ratio', '9:16')
-            model = 'gemini' if 'Gemini' in self.cfg.get('image_model', 'Gemini') else 'imagen_4'
+            # Use gemini as fallback model (UI only has Gemini/Whisk options)
+            model = 'gemini'
             whisk_aspect_ratio = convert_aspect_ratio_to_whisk(aspect_ratio)
 
             if self.character_bible and hasattr(self.character_bible, 'characters'):
