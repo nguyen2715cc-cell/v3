@@ -843,18 +843,20 @@ class LabsFlowClient:
         if job.get("operation_names"): job["status"]="PENDING"
         return len(job.get("operation_names",[]))
 
-    def _wrap_ops(self, op_names: List[str], metadata: Optional[Dict[str, Dict]] = None)->dict:
+    def _wrap_ops(self, op_names: List[str], metadata: Optional[Dict[str, Dict]] = None, project_id: Optional[str] = None)->dict:
         """
         Wrap operation names into the payload format for batch check.
         
         Args:
             op_names: List of operation names
             metadata: Optional dict mapping operation name to metadata (sceneId, status)
+            project_id: Optional project ID for multi-account support
         
         Returns:
             Payload dict with operations list
         
-        NOTE: Batch check requests do NOT include clientContext (verified from real Google Labs requests)
+        NOTE: For multi-account support, we include clientContext with projectId
+              to ensure operations are checked in the correct account context
         """
         uniq=[]; seen=set()
         for s in op_names or []:
@@ -873,25 +875,31 @@ class LabsFlowClient:
                     op_entry["status"] = meta["status"]
             operations.append(op_entry)
 
-        # CRITICAL: Batch check does NOT include clientContext!
-        # Only START requests (start_one, generate_videos_batch) include clientContext
-        return {"operations": operations}
+        # Multi-account fix: Include clientContext with projectId when provided
+        # This ensures operations are checked in the correct account/project context
+        payload = {"operations": operations}
+        if project_id:
+            payload["clientContext"] = {"projectId": project_id}
+        
+        return payload
 
-    def batch_check_operations(self, op_names: List[str], metadata: Optional[Dict[str, Dict]] = None)->Dict[str,Dict]:
+    def batch_check_operations(self, op_names: List[str], metadata: Optional[Dict[str, Dict]] = None, project_id: Optional[str] = None)->Dict[str,Dict]:
         """
         Check status of video generation operations.
         
         Args:
             op_names: List of operation names to check
             metadata: Optional dict mapping operation name to metadata (sceneId, status)
+            project_id: Optional project ID for multi-account support
         
         Returns:
             Dict mapping operation name to status info
         
-        NOTE: This endpoint does NOT require clientContext (based on real Google Labs Flow requests)
+        NOTE: For multi-account support, we include clientContext with projectId
+              to ensure operations are checked in the correct account context
         """
         if not op_names: return {}
-        data=self._post(BATCH_CHECK_URL, self._wrap_ops(op_names, metadata)) or {}
+        data=self._post(BATCH_CHECK_URL, self._wrap_ops(op_names, metadata, project_id)) or {}
         out={}
         def _dedup(xs):
             seen=set(); r=[]
