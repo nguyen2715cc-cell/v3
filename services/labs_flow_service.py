@@ -108,27 +108,92 @@ def _truncate_prompt_smart(prompt: str, max_length: int = MAX_PROMPT_LENGTH) -> 
     """
     Intelligently truncate prompt to fit within API limits while preserving critical information.
     
+    CRITICAL: Always preserve the following sections (in order of priority):
+    1. VISUAL STYLE LOCK - ensures correct visual style (anime vs realistic)
+    2. CRITICAL AUDIO REQUIREMENT - ensures correct language and voice
+    3. CHARACTER IDENTITY LOCK - ensures character consistency
+    
     Truncation strategy:
     1. If prompt is already within limits, return as-is
     2. Remove verbose box-drawing characters and decorative formatting
     3. Simplify directive sections while keeping key requirements
-    4. If still too long, extract most critical information
+    4. If still too long, preserve critical sections and truncate less important parts
     
     Args:
         prompt: The complete prompt text
         max_length: Maximum allowed length (default: MAX_PROMPT_LENGTH)
     
     Returns:
-        Truncated prompt that fits within max_length
+        Truncated prompt that fits within max_length while preserving critical sections
     """
     if len(prompt) <= max_length:
         return prompt
     
-    # Remove decorative box-drawing characters and excessive formatting
-    # These add visual appeal but consume many characters without adding semantic value
+    # CRITICAL: Extract and preserve essential sections that must never be truncated
     import re
     
-    # Replace box-drawing characters with simpler markers
+    # Extract critical sections (these MUST be preserved)
+    visual_style_section = ""
+    audio_section = ""
+    character_section = ""
+    
+    # Find VISUAL STYLE LOCK section
+    visual_match = re.search(
+        r'╔═+╗\n║\s*VISUAL STYLE LOCK.*?║\n╚═+╝.*?╔═+╗\n║\s*END OF VISUAL STYLE LOCK.*?║\n╚═+╝',
+        prompt, re.DOTALL
+    )
+    if visual_match:
+        visual_style_section = visual_match.group(0)
+    
+    # Find CRITICAL AUDIO REQUIREMENT section
+    audio_match = re.search(
+        r'╔═+╗\n║\s*CRITICAL AUDIO REQUIREMENT.*?║\n╚═+╝.*?╔═+╗\n║\s*END OF CRITICAL AUDIO REQUIREMENT.*?║\n╚═+╝',
+        prompt, re.DOTALL
+    )
+    if audio_match:
+        audio_section = audio_match.group(0)
+    
+    # Find CHARACTER IDENTITY LOCK section
+    char_match = re.search(
+        r'╔═+╗\n║\s*CHARACTER IDENTITY LOCK.*?║\n╚═+╝.*?╔═+╗\n║\s*END OF CHARACTER IDENTITY LOCK.*?║\n╚═+╝',
+        prompt, re.DOTALL
+    )
+    if char_match:
+        character_section = char_match.group(0)
+    
+    # Calculate space used by critical sections
+    critical_length = len(visual_style_section) + len(audio_section) + len(character_section)
+    
+    # If critical sections alone exceed max length, we have a problem
+    # In this case, simplify the critical sections but keep their core requirements
+    if critical_length > max_length - 500:  # Leave 500 chars for scene action
+        # Emergency fallback: create minimal critical prompt
+        minimal_prompt = ""
+        
+        # Add minimal visual style enforcement
+        if "anime" in prompt.lower() and "flat" in prompt.lower():
+            minimal_prompt += (
+                "CRITICAL VISUAL STYLE: 2D Hand-Drawn Anime\n"
+                "REQUIRED: anime, flat colors, bold outlines, cel-shading, 2D animation\n"
+                "FORBIDDEN: realistic, 3D CGI, photorealistic, live-action\n\n"
+            )
+        elif "realistic" in prompt.lower():
+            minimal_prompt += (
+                "CRITICAL VISUAL STYLE: Photorealistic\n"
+                "REQUIRED: photorealistic, realistic textures, natural lighting\n"
+                "FORBIDDEN: anime, cartoon, 2D animation, cel-shading\n\n"
+            )
+        
+        # Extract scene action (most important content)
+        scene_match = re.search(r'SCENE ACTION:\n(.+?)(?:\n\nCAMERA:|\n\nAVOID:|$)', prompt, re.DOTALL)
+        if scene_match:
+            minimal_prompt += f"SCENE ACTION:\n{scene_match.group(1)}\n"
+        
+        # Truncate to max length
+        return minimal_prompt[:max_length]
+    
+    # Remove decorative box-drawing characters and excessive formatting
+    # These add visual appeal but consume many characters without adding semantic value
     simplified = prompt
     simplified = re.sub(r'[╔╗╚╝═║━┃┏┓┗┛─│┣┫┳┻╋]', '', simplified)
     
@@ -145,32 +210,45 @@ def _truncate_prompt_smart(prompt: str, max_length: int = MAX_PROMPT_LENGTH) -> 
     
     # If still too long after simplification, do progressive truncation
     if len(simplified) > max_length:
-        # Strategy: Keep the most important sections in order of priority
-        # 1. Keep everything up to max_length but try to break at a natural boundary
+        # Strategy: Keep critical sections + scene action, truncate camera and negatives
         
-        # Try to find a good breaking point (section boundary, paragraph, etc.)
-        truncation_point = max_length - 100  # Leave some buffer
+        # Build final prompt with priorities:
+        # 1. Critical sections (visual style, audio, character)
+        # 2. Scene action
+        # 3. Camera (truncate if needed)
+        # 4. Negatives (truncate if needed)
         
-        # Look for a section break near the truncation point
-        search_start = max(0, truncation_point - 500)
-        search_end = min(len(simplified), truncation_point + 100)
-        search_area = simplified[search_start:search_end]
+        final_parts = []
+        remaining_space = max_length
         
-        # Find the last double newline (section break) in the search area
-        last_section_break = search_area.rfind('\n\n')
-        if last_section_break > 0:
-            # Truncate at the section break
-            actual_break = search_start + last_section_break
-            simplified = simplified[:actual_break].strip()
-        else:
-            # No section break found, look for last sentence
-            last_period = search_area.rfind('. ')
-            if last_period > 0:
-                actual_break = search_start + last_period + 1
-                simplified = simplified[:actual_break].strip()
-            else:
-                # Just do a hard truncate with ellipsis
-                simplified = simplified[:max_length - 50].strip() + "...[truncated]"
+        # Add critical sections first
+        for section in [visual_style_section, audio_section, character_section]:
+            if section and len(section) < remaining_space:
+                final_parts.append(section)
+                remaining_space -= len(section)
+        
+        # Extract and add scene action
+        scene_match = re.search(r'SCENE ACTION:.*?(?=\n\nCAMERA:|\n\nAVOID:|$)', simplified, re.DOTALL)
+        if scene_match and len(scene_match.group(0)) < remaining_space - 200:
+            final_parts.append(scene_match.group(0))
+            remaining_space -= len(scene_match.group(0))
+        
+        # Add camera if space allows
+        camera_match = re.search(r'CAMERA:.*?(?=\n\nAVOID:|$)', simplified, re.DOTALL)
+        if camera_match and len(camera_match.group(0)) < remaining_space - 100:
+            final_parts.append(camera_match.group(0))
+            remaining_space -= len(camera_match.group(0))
+        
+        # Add negatives (truncate if needed)
+        avoid_match = re.search(r'AVOID:.*$', simplified, re.DOTALL)
+        if avoid_match:
+            avoid_section = avoid_match.group(0)
+            if len(avoid_section) > remaining_space:
+                # Truncate negatives list
+                avoid_section = avoid_section[:remaining_space - 20] + "\n[...]"
+            final_parts.append(avoid_section)
+        
+        simplified = '\n\n'.join(final_parts)
         
         # Final safety check
         if len(simplified) > max_length:
@@ -661,13 +739,24 @@ def _build_complete_prompt_text(prompt_data: Any) -> str:
 
     if key_action:
         # Add style reminder before scene action (Triple Reinforcement #2 - PR #8)
+        # ENHANCED: Make style reminder more explicit and harder to ignore
         style_reminder = ""
         if visual_style_tags:
             style_text_lower = ", ".join(visual_style_tags).lower()
             if "anime" in style_text_lower or "flat colors" in style_text_lower or "outlined" in style_text_lower:
-                style_reminder = "[2D anime style with bold outlines and flat colors] "
+                style_reminder = (
+                    "⚠️ ⚠️ ⚠️  CRITICAL STYLE REMINDER ⚠️ ⚠️ ⚠️\n"
+                    "VISUAL STYLE: 2D ANIME with BOLD OUTLINES and FLAT COLORS\n"
+                    "FORBIDDEN: realistic, 3D CGI, photorealistic, live-action, Disney 3D, Pixar\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                )
             elif "realistic" in style_text_lower or "cinematic" in style_text_lower:
-                style_reminder = "[Photorealistic live-action style] "
+                style_reminder = (
+                    "⚠️ ⚠️ ⚠️  CRITICAL STYLE REMINDER ⚠️ ⚠️ ⚠️\n"
+                    "VISUAL STYLE: PHOTOREALISTIC LIVE-ACTION\n"
+                    "FORBIDDEN: anime, cartoon, 2D animation, cel-shading, bold outlines\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                )
         
         # Add character reminder before scene action (Triple Reinforcement #2)
         character_reminder = ""
