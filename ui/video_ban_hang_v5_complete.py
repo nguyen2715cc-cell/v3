@@ -178,8 +178,8 @@ class ImageGenerationWorker(QThread):
                 return
 
             aspect_ratio = self.cfg.get('ratio', '9:16')
-            # Use gemini as fallback model (UI only has Gemini/Whisk options)
-            model = 'gemini'
+            # Set model based on user selection (Whisk or Gemini)
+            model = 'whisk' if self.use_whisk else 'gemini'
             whisk_aspect_ratio = convert_aspect_ratio_to_whisk(aspect_ratio)
 
             self.progress.emit(f"[INFO] Sequential mode: {len(api_keys)} API keys, model: {model}")
@@ -228,9 +228,19 @@ class ImageGenerationWorker(QThread):
 
                 if img_data is None and image_gen_service:
                     try:
-                        self.progress.emit(f"Cảnh {scene.get('index')}: Dùng Gemini...")
+                        model_name = "Whisk" if model == 'whisk' else "Gemini"
+                        self.progress.emit(f"Cảnh {scene.get('index')}: Dùng {model_name}...")
 
                         # Enhanced: Respect rate limit for subsequent requests
+                        # Pass reference images if using Whisk
+                        reference_images = None
+                        if model == 'whisk' and self.model_paths and self.prod_paths:
+                            reference_images = []
+                            if self.model_paths:
+                                reference_images.extend(self.model_paths)
+                            if self.prod_paths:
+                                reference_images.extend(self.prod_paths)
+                        
                         img_data_url = image_gen_service.generate_image_with_rate_limit(
                             text=prompt,
                             api_keys=api_keys,
@@ -238,18 +248,19 @@ class ImageGenerationWorker(QThread):
                             aspect_ratio=aspect_ratio,
                             delay_before=RATE_LIMIT_DELAY_SEC if i > 0 else 0,
                             logger=lambda msg: self.progress.emit(msg),
+                            reference_images=reference_images,
                         )
 
                         if img_data_url and convert_to_bytes:
                             img_data, error = convert_to_bytes(img_data_url)
                             if img_data:
-                                self.progress.emit(f"Cảnh {scene.get('index')}: Gemini ✓")
+                                self.progress.emit(f"Cảnh {scene.get('index')}: {model_name} ✓")
                             else:
                                 self.progress.emit(f"Cảnh {scene.get('index')}: {error}")
                         else:
                             img_data = None
                     except Exception as e:
-                        self.progress.emit(f"Gemini failed: {e}")
+                        self.progress.emit(f"{model_name} failed: {e}")
                         img_data = None
 
                 if img_data:
@@ -329,8 +340,8 @@ class ImageGenerationWorker(QThread):
             self.progress.emit(f"🚀 Parallel mode: {num_accounts} accounts")
 
             aspect_ratio = self.cfg.get('ratio', '9:16')
-            # Use gemini as fallback model (UI only has Gemini/Whisk options)
-            model = 'gemini'
+            # Set model based on user selection (Whisk or Gemini)
+            model = 'whisk' if self.use_whisk else 'gemini'
             whisk_aspect_ratio = convert_aspect_ratio_to_whisk(aspect_ratio)
 
             if self.character_bible and hasattr(self.character_bible, 'characters'):
@@ -438,11 +449,20 @@ class ImageGenerationWorker(QThread):
                     except Exception as e:
                         error = f"Whisk: {str(e)[:50]}"
 
-                # Fallback to Gemini/Imagen
+                # Fallback to model (Whisk or Gemini/Imagen)
                 if img_data is None:
                     try:
                         # Import in thread scope to ensure it's available
                         if image_gen_service:
+                            # Pass reference images if using Whisk
+                            reference_images = None
+                            if model == 'whisk' and self.model_paths and self.prod_paths:
+                                reference_images = []
+                                if self.model_paths:
+                                    reference_images.extend(self.model_paths)
+                                if self.prod_paths:
+                                    reference_images.extend(self.prod_paths)
+                            
                             img_data_url = image_gen_service.generate_image_with_rate_limit(
                                 text=prompt,
                                 api_keys=api_keys,
@@ -450,6 +470,7 @@ class ImageGenerationWorker(QThread):
                                 aspect_ratio=aspect_ratio,
                                 delay_before=10,  # 10s delay per thread
                                 logger=None,
+                                reference_images=reference_images,
                             )
 
                             if img_data_url:
@@ -459,7 +480,8 @@ class ImageGenerationWorker(QThread):
                                     if not img_data:
                                         error = err
                     except Exception as e:
-                        error = f"Gemini: {str(e)[:50]}"
+                        model_name = "Whisk" if model == 'whisk' else "Gemini"
+                        error = f"{model_name}: {str(e)[:50]}"
 
                 # Queue result - use scene_idx from batch tuple, not scene.get('index')
                 results_queue.put((scene_idx, img_data, error))
@@ -489,13 +511,23 @@ class ImageGenerationWorker(QThread):
 
                 try:
                     if image_gen_service:
+                        # Pass reference images if using Whisk
+                        reference_images = None
+                        if model == 'whisk' and self.model_paths and self.prod_paths:
+                            reference_images = []
+                            if self.model_paths:
+                                reference_images.extend(self.model_paths)
+                            if self.prod_paths:
+                                reference_images.extend(self.prod_paths)
+                        
                         thumb_data_url = image_gen_service.generate_image_with_rate_limit(
                             text=prompt,
                             api_keys=api_keys,
                             model=model,
                             aspect_ratio=aspect_ratio,
                             delay_before=RATE_LIMIT_DELAY_SEC,
-                            logger=lambda msg: self.progress.emit(msg)
+                            logger=lambda msg: self.progress.emit(msg),
+                            reference_images=reference_images,
                         )
 
                         if thumb_data_url and convert_to_bytes:

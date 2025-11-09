@@ -286,6 +286,49 @@ def generate_image_with_rate_limit(
             except ImportError:
                 log("[ERROR] DALL-E client không khả dụng")
                 return None
+        
+        elif model.lower() == "whisk":
+            log(f"[IMAGE GEN] Tạo ảnh với Whisk...")
+            # Whisk requires reference images
+            if not reference_images or len(reference_images) == 0:
+                log("[ERROR] Whisk requires reference images (model_paths/prod_paths)")
+                return None
+            
+            try:
+                from services import whisk_service
+                
+                # Convert aspect ratio to Whisk format
+                whisk_aspect_ratio = "IMAGE_ASPECT_RATIO_PORTRAIT"
+                if aspect_ratio:
+                    if aspect_ratio in ("9:16", "4:5"):
+                        whisk_aspect_ratio = "IMAGE_ASPECT_RATIO_PORTRAIT"
+                    elif aspect_ratio in ("16:9", "21:9"):
+                        whisk_aspect_ratio = "IMAGE_ASPECT_RATIO_LANDSCAPE"
+                    elif aspect_ratio == "1:1":
+                        whisk_aspect_ratio = "IMAGE_ASPECT_RATIO_SQUARE"
+                
+                result = whisk_service.generate_image(
+                    prompt=actual_prompt,
+                    model_image=reference_images[0] if len(reference_images) > 0 else None,
+                    product_image=reference_images[1] if len(reference_images) > 1 else None,
+                    aspect_ratio=whisk_aspect_ratio,
+                    debug_callback=log_fn
+                )
+                
+                if result:
+                    log("[SUCCESS] Whisk generation complete!")
+                    return result
+                else:
+                    log("[ERROR] Whisk returned no data")
+                    return None
+                    
+            except ImportError:
+                log("[ERROR] Whisk service không khả dụng")
+                return None
+            except Exception as e:
+                log(f"[ERROR] Whisk generation failed: {str(e)[:100]}")
+                return None
+        
         else:
             log(f"[ERROR] Unsupported model: {model}")
             return None
