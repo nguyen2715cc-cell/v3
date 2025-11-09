@@ -148,6 +148,13 @@ def _enhance_character_with_anchors(char_data: Dict[str, Any], script: str) -> D
         # Scene Reminder Phrases
         "scene_reminders": _generate_scene_reminders(name, role, char_data),
 
+        # Costume/Clothing details
+        "costume": _extract_costume_details(visual_identity),
+
+        # Accessories & Weapons
+        "accessories": _extract_accessories(visual_identity),
+        "weapons": _extract_weapons(visual_identity),
+
         # Original visual identity for reference
         "visual_identity": visual_identity,
     }
@@ -543,14 +550,19 @@ def _extract_color_near_word(text: str, word: str) -> Optional[str]:
 
 
 def inject_character_consistency(scene_prompt: str, bible: CharacterBible, 
-                                  character_names: Optional[List[str]] = None) -> str:
+                                  character_names: Optional[List[str]] = None,
+                                  include_costume: bool = True,
+                                  include_accessories: bool = True) -> str:
     """
     Inject character consistency details into a scene prompt.
+    Enhanced to include costume and accessory tracking for better consistency.
     
     Args:
         scene_prompt: Original scene prompt
         bible: CharacterBible object
         character_names: Optional list of character names appearing in this scene
+        include_costume: Whether to include costume/clothing details (default: True)
+        include_accessories: Whether to include accessory/weapon details (default: True)
         
     Returns:
         Enhanced scene prompt with character consistency details
@@ -591,6 +603,55 @@ def inject_character_consistency(scene_prompt: str, bible: CharacterBible,
         eyes = char.get("eye_signature", {})
         if eyes:
             char_block.append(f"Eyes: {eyes.get('color', '')} {eyes.get('shape', '')} with {eyes.get('expression', '')} expression")
+
+        # Facial map
+        face = char.get("facial_map", {})
+        if face:
+            char_block.append(f"Face: {face.get('nose', '')} nose, {face.get('lips', '')} lips, {face.get('jawline', '')} jawline")
+            marks = face.get('distinguishing_marks', 'none')
+            if marks and marks != 'none':
+                char_block.append(f"Marks: {marks}")
+
+        # Costume/Clothing (if enabled)
+        if include_costume:
+            costume = char.get("costume", {})
+            if costume:
+                default_outfit = costume.get("default_style", "")
+                color_palette = costume.get("color_palette", "")
+                if default_outfit or color_palette:
+                    char_block.append(f"Costume: {default_outfit}, colors: {color_palette}")
+            elif char.get("visual_identity"):
+                # Extract clothing from visual_identity if no costume field
+                vi = char.get("visual_identity", "").lower()
+                clothing_keywords = ["shirt", "dress", "jacket", "pants", "skirt", "coat", "uniform", "robe"]
+                for keyword in clothing_keywords:
+                    if keyword in vi:
+                        char_block.append(f"Clothing: {keyword} (consistent across all scenes)")
+                        break
+
+        # Accessories & Weapons (if enabled)
+        if include_accessories:
+            accessories = char.get("accessories", [])
+            weapons = char.get("weapons", [])
+            
+            if accessories:
+                char_block.append(f"Accessories: {', '.join(accessories)}")
+            if weapons:
+                char_block.append(f"Weapons: {', '.join(weapons)}")
+            
+            # Fallback: extract from visual_identity if no explicit fields
+            if not accessories and not weapons:
+                vi = char.get("visual_identity", "").lower()
+                accessory_keywords = ["glasses", "necklace", "watch", "ring", "earring", "bracelet", "hat", "cap"]
+                weapon_keywords = ["sword", "gun", "bow", "knife", "staff", "axe", "spear"]
+                
+                found_accessories = [kw for kw in accessory_keywords if kw in vi]
+                found_weapons = [kw for kw in weapon_keywords if kw in vi]
+                
+                if found_accessories:
+                    char_block.append(f"Accessories: {', '.join(found_accessories)}")
+                if found_weapons:
+                    char_block.append(f"Weapons: {', '.join(found_weapons)}")
 
         # Consistency anchors (top 3 for scene prompts to avoid bloat)
         anchors = char.get("consistency_anchors", [])
@@ -690,3 +751,214 @@ def format_character_bible_for_display(bible: CharacterBible) -> str:
         parts.append("")  # Empty line between characters
 
     return "\n".join(parts)
+
+
+def _extract_costume_details(visual_identity: str) -> Dict[str, str]:
+    """
+    Extract costume/clothing details from visual identity.
+    
+    Args:
+        visual_identity: Character visual identity description
+        
+    Returns:
+        Dictionary with costume details (default_style, color_palette, condition)
+    """
+    vi_lower = visual_identity.lower()
+    
+    # Extract clothing items
+    clothing_items = []
+    clothing_keywords = {
+        "shirt": ["shirt", "t-shirt", "blouse", "top"],
+        "pants": ["pants", "trousers", "jeans"],
+        "dress": ["dress", "gown"],
+        "jacket": ["jacket", "coat", "blazer"],
+        "skirt": ["skirt"],
+        "uniform": ["uniform"],
+        "robe": ["robe", "cloak"],
+        "suit": ["suit"],
+        "armor": ["armor", "armour"],
+    }
+    
+    for category, keywords in clothing_keywords.items():
+        for keyword in keywords:
+            if keyword in vi_lower:
+                # Try to extract color
+                color = _extract_color_near_word(visual_identity, keyword)
+                if color:
+                    clothing_items.append(f"{color} {category}")
+                else:
+                    clothing_items.append(category)
+                break
+    
+    # Extract color palette
+    colors = ["red", "blue", "green", "yellow", "white", "black", "gray", "grey", 
+              "purple", "orange", "pink", "brown", "navy", "gold", "silver"]
+    found_colors = [color for color in colors if color in vi_lower]
+    color_palette = ", ".join(set(found_colors)) if found_colors else "neutral"
+    
+    # Determine clothing style/condition
+    condition = "clean"
+    if "dirty" in vi_lower or "worn" in vi_lower or "torn" in vi_lower:
+        condition = "worn/dirty"
+    elif "elegant" in vi_lower or "pristine" in vi_lower or "formal" in vi_lower:
+        condition = "pristine/formal"
+    
+    return {
+        "default_style": ", ".join(clothing_items) if clothing_items else "casual outfit",
+        "color_palette": color_palette,
+        "condition": condition
+    }
+
+
+def _extract_accessories(visual_identity: str) -> List[str]:
+    """
+    Extract accessories from visual identity.
+    
+    Args:
+        visual_identity: Character visual identity description
+        
+    Returns:
+        List of accessories
+    """
+    vi_lower = visual_identity.lower()
+    accessories = []
+    
+    accessory_keywords = {
+        "glasses": ["glasses", "spectacles", "sunglasses"],
+        "necklace": ["necklace", "chain"],
+        "watch": ["watch", "wristwatch"],
+        "ring": ["ring"],
+        "earrings": ["earring", "earrings"],
+        "bracelet": ["bracelet", "bangle"],
+        "hat": ["hat", "cap", "helmet"],
+        "gloves": ["gloves"],
+        "scarf": ["scarf"],
+        "belt": ["belt"],
+        "bag": ["bag", "backpack", "purse"],
+    }
+    
+    for item, keywords in accessory_keywords.items():
+        for keyword in keywords:
+            if keyword in vi_lower:
+                # Try to extract color/type
+                color = _extract_color_near_word(visual_identity, keyword)
+                if color:
+                    accessories.append(f"{color} {item}")
+                else:
+                    accessories.append(item)
+                break
+    
+    return accessories
+
+
+def _extract_weapons(visual_identity: str) -> List[str]:
+    """
+    Extract weapons from visual identity.
+    
+    Args:
+        visual_identity: Character visual identity description
+        
+    Returns:
+        List of weapons
+    """
+    vi_lower = visual_identity.lower()
+    weapons = []
+    
+    weapon_keywords = [
+        "sword", "blade", "katana", "saber",
+        "gun", "pistol", "rifle", "revolver",
+        "bow", "crossbow",
+        "knife", "dagger",
+        "staff", "rod", "wand",
+        "axe", "hammer",
+        "spear", "lance",
+        "shield",
+        "magic", "spell",
+    ]
+    
+    for weapon in weapon_keywords:
+        if weapon in vi_lower:
+            # Try to extract descriptor
+            color = _extract_color_near_word(visual_identity, weapon)
+            if color:
+                weapons.append(f"{color} {weapon}")
+            else:
+                weapons.append(weapon)
+    
+    return weapons
+
+
+def inject_scene_transition(current_scene_prompt: str, previous_scene_prompt: Optional[str] = None,
+                           transition_type: str = "cut") -> str:
+    """
+    Inject scene transition information to improve continuity between scenes.
+    
+    Args:
+        current_scene_prompt: Prompt for the current scene
+        previous_scene_prompt: Prompt for the previous scene (if any)
+        transition_type: Type of transition (cut, fade, dissolve, match_cut)
+        
+    Returns:
+        Enhanced scene prompt with transition information
+    """
+    if not previous_scene_prompt:
+        # First scene, no transition needed
+        return current_scene_prompt
+    
+    transition_instructions = {
+        "cut": "Direct cut from previous scene",
+        "fade": "Fade in from previous scene",
+        "dissolve": "Dissolve transition from previous scene",
+        "match_cut": "Match cut from previous scene (similar composition or action)",
+    }
+    
+    transition_text = transition_instructions.get(transition_type, "Transition from previous scene")
+    
+    # Add transition context
+    enhanced_prompt = f"[SCENE TRANSITION: {transition_text}]\n\n{current_scene_prompt}"
+    
+    return enhanced_prompt
+
+
+def inject_style_consistency(scene_prompt: str, style: str) -> str:
+    """
+    Inject style consistency markers into scene prompt to prevent style mixing.
+    
+    Args:
+        scene_prompt: Original scene prompt
+        style: Video style (e.g., "Cinematic", "Anime", "Documentary")
+        
+    Returns:
+        Enhanced scene prompt with style consistency markers
+    """
+    if not style:
+        return scene_prompt
+    
+    style_lower = style.lower()
+    
+    # Style-specific instructions
+    style_instructions = {
+        "cinematic": "Maintain cinematic quality: film-like lighting, depth of field, professional camera work",
+        "anime": "Maintain anime style: vibrant colors, expressive features, dynamic poses",
+        "documentary": "Maintain documentary style: realistic, natural lighting, observational camera",
+        "3d": "Maintain 3D/CGI style: rendered graphics, consistent 3D models",
+        "cartoon": "Maintain cartoon style: simplified forms, bright colors, exaggerated features",
+        "realistic": "Maintain photorealistic style: natural lighting, real-world physics",
+        "stop-motion": "Maintain stop-motion style: tactile materials, frame-by-frame aesthetic",
+    }
+    
+    # Find matching style instruction
+    style_instruction = None
+    for key, instruction in style_instructions.items():
+        if key in style_lower:
+            style_instruction = instruction
+            break
+    
+    if not style_instruction:
+        # Generic style consistency instruction
+        style_instruction = f"Maintain consistent {style} visual style throughout"
+    
+    # Add style consistency marker
+    enhanced_prompt = f"[STYLE: {style_instruction}]\n\n{scene_prompt}"
+    
+    return enhanced_prompt

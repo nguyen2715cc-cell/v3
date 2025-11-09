@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import json, requests
+from typing import Dict, List, Any
 from services.core.key_manager import get_key
 
 # Constants for validation
@@ -459,7 +460,7 @@ Mỗi nhân vật PHẢI:
 - **motivation**: Động lực sâu thẳm, thúc đẩy hành động (ví dụ: "Chứng minh bản thân", "Bảo vệ người thân")
 - **default_behavior**: Phản ứng tự nhiên khi stress (ví dụ: "Đùa cợt để giấu lo lắng", "Im lặng suy nghĩ")
 - **visual_identity**: Đặc điểm nhận diện CỰC KỲ CHI TIẾT (ví dụ: "Áo da đen, scar trên mặt, mắt xanh lá, tóc đen ngắn, râu ngắn", "Áo sơ mi trắng, kính mắt tròn, tóc nâu dài qua vai, không trang sức")
-  → MÔ TẢ ĐẦY ĐỦ: Mặt (hình dạng, màu da), mắt (màu, hình dạng), mũi, mồm, tai, tóc (màu, kiểu, độ dài), râu/ria mép (nếu có), quần áo (màu sắc, kiểu dáng cụ thể), phụ kiện (kính, đồng hồ, trang sức...), chiều cao/vóc dáng
+  → MÔ TẢ ĐẦY ĐỦ: Mặt (hình dạng, màu da), mắt (màu, hình dạng), mũi, mồm, tai, tóc (màu, kiểu, độ dài), râu/ria mép (nếu có), quần áo (màu sắc, kiểu dáng cụ thể), phụ kiện (kính, đồng hồ, trang sức...), vũ khí (nếu có), chiều cao/vóc dáng
   → TUYỆT ĐỐI KHÔNG thay đổi qua các cảnh!
 - **archetype**: Hero/Mentor/Trickster/Rebel (theo 12 archetypes)
 - **fatal_flaw**: Khuyết điểm dẫn đến conflict (ví dụ: "Quá tự tin", "Không tin người")
@@ -487,19 +488,76 @@ Khi tạo prompt cho MỖI CẢNH, bạn PHẢI:
    - ❌ Râu, ria mép (nếu có - không được thêm/bớt tùy tiện)
    - ❌ Màu sắc quần áo, kiểu dáng trang phục
    - ❌ Phụ kiện (kính, đồng hồ, trang sức...)
+   - ❌ Vũ khí (nếu có - phải giữ nguyên qua các cảnh)
    - ❌ Vóc dáng, chiều cao, thể hình
    - ❌ Giới tính, tuổi tác
    - ❌ Giọng nói (phải consistent với character)
 
 3. **Ví dụ ĐÚNG:**
-   Scene 1 prompt: "John, 30 tuổi nam, áo sơ mi xanh navy, quần tây đen, mắt nâu, tóc đen ngắn gọn, kính gọng đen vuông, đang đứng trong văn phòng..."
-   Scene 2 prompt: "John, 30 tuổi nam, áo sơ mi xanh navy, quần tây đen, mắt nâu, tóc đen ngắn gọn, kính gọng đen vuông, đang ngồi uống cà phê..."
+   Scene 1 prompt: "John, 30 tuổi nam, áo sơ mi xanh navy, quần tây đen, mắt nâu, tóc đen ngắn gọn, kính gọng đen vuông, đeo đồng hồ bạc tay trái, đang đứng trong văn phòng..."
+   Scene 2 prompt: "John, 30 tuổi nam, áo sơ mi xanh navy, quần tây đen, mắt nâu, tóc đen ngắn gọn, kính gọng đen vuông, đeo đồng hồ bạc tay trái, đang ngồi uống cà phê..."
    
    ✓ TOÀN BỘ đặc điểm giữ nguyên, chỉ hành động thay đổi
 
 4. **Ví dụ SAI (KHÔNG ĐƯỢC LÀM):**
-   Scene 1: "John, áo sơ mi xanh, tóc đen..."
+   Scene 1: "John, áo sơ mi xanh, tóc đen, đeo kính..."
    Scene 2: "John, áo polo trắng, tóc nâu..." ← ❌ Đã thay đổi quần áo và màu tóc!
+
+═══════════════════════════════════════════════════════════════
+🎞️ TÍNH LIÊN TỤC GIỮA CÁC CẢNH (SCENE CONTINUITY)
+═══════════════════════════════════════════════════════════════
+
+**CRITICAL - BẮT BUỘC:**
+
+Để đảm bảo các cảnh có thể lắp ghép thành video hoàn chỉnh:
+
+1. **Liên kết nội dung:**
+   - Mỗi cảnh phải TIẾP NỐI logic với cảnh trước
+   - Nhân vật, địa điểm phải có sự chuyển tiếp hợp lý
+   - Action/emotion phải tiếp diễn theo chuỗi tự nhiên
+
+2. **Chuyển cảnh (Transitions):**
+   - Cảnh đầu: Thiết lập bối cảnh rõ ràng
+   - Các cảnh giữa: Kế thừa context từ cảnh trước
+   - Cảnh cuối: Kết thúc hợp lý với toàn bộ câu chuyện
+
+3. **Visual Notes PHẢI bao gồm:**
+   - Lighting continuity: Giữ ánh sáng nhất quán (cùng thời gian trong ngày)
+   - Location continuity: Nếu cùng địa điểm, props/background phải giống nhau
+   - Action continuity: Động tác/tư thế tiếp nối hợp lý
+
+**Ví dụ ĐÚNG:**
+Scene 1: "John đứng trước cửa nhà, mặt trời buổi sáng, chuẩn bị đi làm"
+Scene 2: "John đang lái xe trên đường, ánh sáng buổi sáng, trên đường đến văn phòng"
+Scene 3: "John bước vào văn phòng, ánh sáng trong nhà, bắt đầu ngày làm việc"
+
+**Ví dụ SAI:**
+Scene 1: "John ở nhà buổi sáng"
+Scene 2: "John ở công viên buổi tối" ← ❌ Nhảy cóc địa điểm và thời gian
+Scene 3: "John trong rừng buổi trưa" ← ❌ Không liên quan gì đến 2 cảnh trước
+
+═══════════════════════════════════════════════════════════════
+🎨 NHẤT QUÁN PHONG CÁCH (STYLE CONSISTENCY)  
+═══════════════════════════════════════════════════════════════
+
+**CRITICAL - BẮT BUỘC:**
+
+Toàn bộ video PHẢI giữ một phong cách thống nhất từ đầu đến cuối:
+
+1. **Visual Style:** 
+   - Nếu cảnh 1 là "{style_vi}" → TẤT CẢ các cảnh khác cũng phải "{style_vi}"
+   - KHÔNG được lẫn lộn: Cinematic ↔ Anime ↔ Documentary ↔ 3D
+   - Camera work, lighting, color grading phải nhất quán
+
+2. **Tone & Mood:**
+   - Serious/Dramatic → Giữ tone nghiêm túc xuyên suốt
+   - Comedy/Lighthearted → Giữ tone hài hước xuyên suốt
+   - KHÔNG chuyển đột ngột giữa các tone (trừ khi có mục đích rõ ràng)
+
+3. **Technical Consistency:**
+   - Camera angles: Giữ style quay nhất quán (documentary-style, cinematic, vlog)
+   - Color palette: Giữ bảng màu nhất quán qua các cảnh
+   - Aspect ratio: Không thay đổi tỷ lệ khung hình
 
 ═══════════════════════════════════════════════════════════════
 
@@ -565,29 +623,34 @@ Trả về **JSON hợp lệ** theo schema EXACT (không thêm ký tự ngoài J
   "emotional_arc": "Cung cảm xúc của story: [Start emotion] → [Peaks & Valleys] → [End emotion]",
   "scenes": [
     {{
-      "prompt_vi":"Visual prompt SIÊU CỤ THỂ (action, lighting, camera, mood, characters) - 2-3 câu cinematic",
-      "prompt_tgt":"Detailed visual prompt in {target_language}",
+      "prompt_vi":"Visual prompt SIÊU CỤ THỂ (action, lighting, camera, mood, characters with FULL details) - 2-3 câu cinematic",
+      "prompt_tgt":"Detailed visual prompt in {target_language} with FULL character details",
       "duration": 8,
-      "characters": ["Nhân vật xuất hiện"],
+      "characters": ["Nhân vật xuất hiện (FULL visual_identity)"],
       "location": "Location cụ thể",
-      "time_of_day": "Day/Night/Golden hour/etc",
+      "time_of_day": "Day/Night/Golden hour/etc (MUST be consistent with previous scene if same location)",
       "camera_shot": "Wide/Close-up/POV/Tracking/etc + movement",
-      "lighting_mood": "Bright/Dark/Warm/Cold/High-contrast/etc",
+      "lighting_mood": "Bright/Dark/Warm/Cold/High-contrast/etc (MUST match time_of_day)",
       "emotion": "Cảm xúc chủ đạo của scene",
       "story_beat": "Plot point: Setup/Rising action/Twist/Climax/Resolution",
+      "transition_from_previous": "How this scene connects to previous scene (location/action/time continuity)",
+      "style_notes": "Specific {style_vi} style elements in this scene",
       "dialogues": [
         {{"speaker":"Tên","text_vi":"Thoại tự nhiên, có subtext","text_tgt":"Natural line in {target_language}","emotion":"angry/sad/happy/etc"}}
       ],
-      "visual_notes": "Ghi chú thêm về visuals: props, colors, symbolism, transitions"
+      "visual_notes": "Props, colors, symbolism, transitions, continuity elements from previous scene"
     }}
   ]
 }}
 
-**CHÚ Ý:** 
+**CHÚ Ý QUAN TRỌNG:** 
 - Cảnh 1 PHẢI là HOOK MẠNH (action/shocking/intriguing)
 - Prompts PHẢI visual & cinematic (tránh abstract)
 - Mỗi scene có emotion & story beat rõ ràng
-- QUAN TRỌNG: Kịch bản phải LIÊN QUAN TRỰC TIẾP đến ý tưởng người dùng cung cấp
+- **MỖI SCENE phải bao gồm TOÀN BỘ visual_identity của nhân vật (không lược bớt)**
+- **transition_from_previous: Mô tả cách scene này kết nối với scene trước (location, action, lighting)**
+- **style_notes: Ghi rõ các yếu tố {style_vi} trong scene này**
+- **QUAN TRỌNG: Kịch bản phải LIÊN QUAN TRỰC TIẾP đến ý tưởng người dùng cung cấp**
 """.strip()
 
     # Adjust input label based on detected type
@@ -861,6 +924,86 @@ def _validate_idea_relevance(idea, generated_content, threshold=0.15):
     
     return True, similarity, None
 
+
+def _validate_scene_continuity(scenes: List[Dict[str, Any]]) -> List[str]:
+    """
+    Validate scene continuity to ensure scenes can be assembled into a complete video.
+    Checks for:
+    1. Location continuity (sudden jumps without explanation)
+    2. Time continuity (day/night consistency)
+    3. Character presence (characters appearing/disappearing without reason)
+    
+    Args:
+        scenes: List of scene dicts
+        
+    Returns:
+        List of continuity issue warnings
+    """
+    if not scenes or len(scenes) < 2:
+        return []
+    
+    issues = []
+    
+    for i in range(1, len(scenes)):
+        prev_scene = scenes[i-1]
+        curr_scene = scenes[i]
+        
+        # Check location continuity
+        prev_loc = prev_scene.get("location", "").lower()
+        curr_loc = curr_scene.get("location", "").lower()
+        transition = curr_scene.get("transition_from_previous", "").lower()
+        
+        # If location changes dramatically without transition explanation
+        if prev_loc and curr_loc and prev_loc != curr_loc:
+            if not transition or len(transition) < 10:
+                issues.append(
+                    f"Scene {i} -> {i+1}: Location jump from '{prev_loc}' to '{curr_loc}' "
+                    f"without clear transition explanation"
+                )
+        
+        # Check time continuity
+        prev_time = prev_scene.get("time_of_day", "").lower()
+        curr_time = curr_scene.get("time_of_day", "").lower()
+        
+        # Detect illogical time jumps (e.g., night -> day in same location without explanation)
+        if prev_time and curr_time and prev_loc == curr_loc:
+            time_keywords = {
+                "day": ["day", "morning", "afternoon", "noon"],
+                "night": ["night", "evening", "dusk", "dawn"],
+            }
+            
+            prev_is_day = any(kw in prev_time for kw in time_keywords["day"])
+            prev_is_night = any(kw in prev_time for kw in time_keywords["night"])
+            curr_is_day = any(kw in curr_time for kw in time_keywords["day"])
+            curr_is_night = any(kw in curr_time for kw in time_keywords["night"])
+            
+            if (prev_is_day and curr_is_night) or (prev_is_night and curr_is_day):
+                if not transition or "time" not in transition:
+                    issues.append(
+                        f"Scene {i} -> {i+1}: Time jump from {prev_time} to {curr_time} "
+                        f"in same location without explanation"
+                    )
+        
+        # Check character continuity
+        prev_chars = set(prev_scene.get("characters", []))
+        curr_chars = set(curr_scene.get("characters", []))
+        
+        # Characters disappearing
+        disappeared = prev_chars - curr_chars
+        if disappeared and len(prev_chars) > 1:  # Only flag if multiple characters
+            issues.append(
+                f"Scene {i} -> {i+1}: Characters {disappeared} disappeared without explanation"
+            )
+        
+        # New characters appearing
+        appeared = curr_chars - prev_chars
+        if appeared and i > 1:  # After first scene
+            # This is less critical, but note it
+            pass  # New characters can appear, so we don't flag this as an issue
+    
+    return issues
+
+
 def _validate_dialogue_language(scenes, target_lang):
     """
     Validate that dialogue text_tgt fields are in the correct target language.
@@ -1013,6 +1156,15 @@ def generate_script(idea, style, duration_seconds, provider='Gemini 2.5', api_ke
     character_bible = res.get("character_bible", [])
     if character_bible:
         res["scenes"] = _enforce_character_consistency(scenes, character_bible)
+    
+    # NEW: Validate and enhance scene continuity
+    report_progress("Đang kiểm tra tính liên tục của các cảnh...", 85)
+    scenes = res.get("scenes", [])
+    if scenes:
+        continuity_issues = _validate_scene_continuity(scenes)
+        if continuity_issues:
+            print(f"[WARN] Scene continuity issues detected: {continuity_issues}")
+            res["scene_continuity_warnings"] = continuity_issues
 
     # Store voice configuration in result for consistency
     if voice_config:
