@@ -292,6 +292,12 @@ class VideoGenerationWorker(QThread):
             if tokens and len(tokens) > 0:
                 body["bearer_token"] = tokens[0]
             
+            # Store account info for multi-account batch checking
+            if account_mgr.is_multi_account_enabled():
+                body["account_name"] = account.name
+                body["project_id"] = project_id
+                body["tokens"] = tokens
+            
             self.log.emit(f"[INFO] Start scene {actual_scene_num} with {copies} copies in one batch…")
             rc = client.start_one(
                 body, model_key, ratio, scene["prompt"], copies=copies, project_id=project_id
@@ -368,19 +374,96 @@ class VideoGenerationWorker(QThread):
                 f"Processing... ({completed_count}/{total_scenes} scenes completed)"
             )
 
-            # Extract all operation names from all jobs
-            names = []
-            metadata = {}
-            for job_info in jobs:
-                job_dict = job_info['body']
-                names.extend(job_dict.get("operation_names", []))
-                op_meta = job_dict.get("operation_metadata", {})
-                if op_meta:
-                    metadata.update(op_meta)
-
-            # Batch check with error handling
+            # Multi-account batch check: group jobs by account
+            rs = {}
+            
             try:
-                rs = client.batch_check_operations(names, metadata)
+                if account_mgr.is_multi_account_enabled():
+                    # Group jobs by account
+                    jobs_by_account = {}
+                    jobs_without_account = []
+                    
+                    for job_info in jobs:
+                        job_dict = job_info['body']
+                        acc_name = job_dict.get("account_name")
+                        if acc_name:
+                            if acc_name not in jobs_by_account:
+                                jobs_by_account[acc_name] = []
+                            jobs_by_account[acc_name].append(job_info)
+                        else:
+                            jobs_without_account.append(job_info)
+                    
+                    # Check each account's operations with its own client
+                    for acc_name, account_jobs in jobs_by_account.items():
+                        # Find the account
+                        account = None
+                        for acc in account_mgr.get_all_accounts():
+                            if acc.name == acc_name:
+                                account = acc
+                                break
+                        
+                        if not account:
+                            self.log.emit(f"[WARN] Account {acc_name} not found, skipping")
+                            continue
+                        
+                        # Create client for this account
+                        account_client = LabsFlowClient(account.tokens, on_event=on_labs_event)
+                        
+                        # Collect operations and metadata for this account
+                        account_names = []
+                        account_metadata = {}
+                        for job_info in account_jobs:
+                            job_dict = job_info['body']
+                            account_names.extend(job_dict.get("operation_names", []))
+                            op_meta = job_dict.get("operation_metadata", {})
+                            if op_meta:
+                                account_metadata.update(op_meta)
+                        
+                        # Check this account's operations with project_id
+                        if account_names:
+                            try:
+                                account_rs = account_client.batch_check_operations(
+                                    account_names, account_metadata, project_id=account.project_id
+                                )
+                                rs.update(account_rs)
+                            except Exception as e:
+                                self.log.emit(f"[WARN] Check error for {acc_name}: {e}")
+                    
+                    # Check jobs without account using fallback (if any)
+                    if jobs_without_account:
+                        fallback_names = []
+                        fallback_metadata = {}
+                        for job_info in jobs_without_account:
+                            job_dict = job_info['body']
+                            fallback_names.extend(job_dict.get("operation_names", []))
+                            op_meta = job_dict.get("operation_metadata", {})
+                            if op_meta:
+                                fallback_metadata.update(op_meta)
+                        
+                        if fallback_names:
+                            try:
+                                # Use the last client in cache as fallback
+                                fallback_client = list(client_cache.values())[-1] if client_cache else None
+                                if fallback_client:
+                                    fallback_rs = fallback_client.batch_check_operations(fallback_names, fallback_metadata)
+                                    rs.update(fallback_rs)
+                            except Exception as e:
+                                self.log.emit(f"[WARN] Check error for jobs without account: {e}")
+                else:
+                    # Single-account mode (legacy)
+                    names = []
+                    metadata = {}
+                    for job_info in jobs:
+                        job_dict = job_info['body']
+                        names.extend(job_dict.get("operation_names", []))
+                        op_meta = job_dict.get("operation_metadata", {})
+                        if op_meta:
+                            metadata.update(op_meta)
+                    
+                    # Use the last client in cache
+                    client = list(client_cache.values())[-1] if client_cache else None
+                    if client and names:
+                        rs = client.batch_check_operations(names, metadata)
             except Exception as e:
                 self.log.emit(f"[WARN] Lỗi kiểm tra trạng thái (vòng {poll_round + 1}): {e}")
                 time.sleep(10)
