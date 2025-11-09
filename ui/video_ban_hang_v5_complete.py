@@ -1527,6 +1527,7 @@ class VideoBanHangV5(QWidget):
                 # Connect scene card signals to handlers
                 card.recreate_requested.connect(self._on_scene_recreate_image)
                 card.generate_video_requested.connect(self._on_scene_generate_video)
+                card.regenerate_video_requested.connect(self._on_scene_regenerate_video)
 
                 self.scenes_layout.insertWidget(i, card)
                 self.scene_cards.append(card)
@@ -1816,6 +1817,12 @@ class VideoBanHangV5(QWidget):
         
         # Save to history
         self._save_to_history(video_count=1)
+
+    def _on_scene_regenerate_video(self, scene_idx):
+        """Regenerate video for a specific scene (Requirement #1)"""
+        self._append_log(f"🔁 Tạo lại video cho cảnh {scene_idx}...")
+        # Reuse the same logic as initial video generation
+        self._on_scene_generate_video(scene_idx)
 
     def stop_processing(self):
         """Stop all workers"""
