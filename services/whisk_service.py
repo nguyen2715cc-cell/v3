@@ -31,7 +31,6 @@ def get_session_cookies() -> str:
     4. Copy the value of "__Secure-next-auth.session-token"
     5. Add to config as 'labs_session_token'
     """
-    from services.core.key_manager import get_all_keys
     from services.core.config import load as load_config
     
     # Try to get session token from config
@@ -41,22 +40,13 @@ def get_session_cookies() -> str:
     if session_token:
         return f"__Secure-next-auth.session-token={session_token}"
     
-    # Fallback: try labs tokens (may not work with 401 errors)
-    labs_tokens = get_all_keys('labs')
-    if labs_tokens:
-        # Session token format: __Secure-next-auth.session-token=...
-        # Note: Using labs bearer tokens as session cookies will likely fail
-        return f"__Secure-next-auth.session-token={labs_tokens[0]}"
-    
-    # Fall back to google keys if no labs tokens
-    google_keys = get_all_keys('google')
-    if google_keys:
-        return f"__Secure-next-auth.session-token={google_keys[0]}"
-    
+    # FIXED: Don't fallback to regular API keys - they won't work as session cookies
+    # Fail early with clear error message instead of causing 401 errors
     raise WhiskError(
         "No Whisk session token configured. "
         "Please configure 'labs_session_token' in config.json with actual "
-        "browser session cookie from https://labs.google/fx/tools/whisk"
+        "browser session cookie from https://labs.google/fx/tools/whisk\n"
+        "Note: Regular Google API keys will NOT work - you must use actual session cookies."
     )
 
 
@@ -78,7 +68,6 @@ def get_bearer_token() -> str:
     
     Note: Bearer tokens typically expire after some time and need to be refreshed.
     """
-    from services.core.key_manager import get_all_keys
     from services.core.config import load as load_config
     
     # Try to get bearer token from config
@@ -88,22 +77,13 @@ def get_bearer_token() -> str:
     if bearer_token:
         return bearer_token
     
-    # Fallback: try labs tokens (may not work with 401 errors)
-    labs_tokens = get_all_keys('labs')
-    if labs_tokens:
-        # Note: Using labs API keys as bearer tokens will likely fail
-        # Bearer tokens need to be OAuth tokens, not API keys
-        return labs_tokens[0]
-    
-    # Fall back to google keys if no labs tokens
-    google_keys = get_all_keys('google')
-    if google_keys:
-        return google_keys[0]
-    
+    # FIXED: Don't fallback to regular API keys - they won't work as OAuth bearer tokens
+    # Fail early with clear error message instead of causing 401 errors
     raise WhiskError(
         "No Bearer token configured for Whisk API. "
         "Please configure 'whisk_bearer_token' in config.json with actual "
-        "OAuth bearer token from https://labs.google API calls"
+        "OAuth bearer token from https://labs.google API calls\n"
+        "Note: Regular Google API keys will NOT work - you must use actual OAuth bearer tokens."
     )
 
 
