@@ -25,12 +25,13 @@ class SceneResultCard(QFrame):
     - 80x80px image preview (compact size)
     - Alternating backgrounds (#FFFFFF / #E3F2FD)
     - Title, description, speech text
-    - Action buttons: Prompt, Recreate, Generate Video
+    - Action buttons: Prompt, Recreate Image, Generate Video, Regenerate Video
     """
 
     prompt_requested = pyqtSignal(int)  # scene index
-    recreate_requested = pyqtSignal(int)  # scene index
+    recreate_requested = pyqtSignal(int)  # scene index (for image recreation)
     generate_video_requested = pyqtSignal(int)  # scene index
+    regenerate_video_requested = pyqtSignal(int)  # scene index (for video regeneration)
 
     def __init__(self, scene_index, scene_data, alternating_color=False, parent=None):
         super().__init__(parent)
@@ -139,7 +140,7 @@ class SceneResultCard(QFrame):
         btn_prompt.clicked.connect(lambda: self._show_prompt_dialog())
         buttons_layout.addWidget(btn_prompt)
 
-        btn_recreate = QPushButton("🔄 Tạo lại")
+        btn_recreate = QPushButton("🔄 Tạo lại ảnh")
         btn_recreate.setStyleSheet(btn_style)
         btn_recreate.clicked.connect(lambda: self.recreate_requested.emit(self.scene_index))
         buttons_layout.addWidget(btn_recreate)
@@ -148,6 +149,12 @@ class SceneResultCard(QFrame):
         btn_video.setStyleSheet(btn_style)
         btn_video.clicked.connect(lambda: self.generate_video_requested.emit(self.scene_index))
         buttons_layout.addWidget(btn_video)
+
+        # Requirement #1: Add regenerate video button
+        btn_regen_video = QPushButton("🔁 Tạo lại video")
+        btn_regen_video.setStyleSheet(btn_style)
+        btn_regen_video.clicked.connect(lambda: self.regenerate_video_requested.emit(self.scene_index))
+        buttons_layout.addWidget(btn_regen_video)
 
         buttons_layout.addStretch()
         content_layout.addLayout(buttons_layout)

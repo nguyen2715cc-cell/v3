@@ -1321,6 +1321,13 @@ class Text2VideoPanelV5(QWidget):
                     'prompt_video': tgt or vi
                 }
                 card = SceneResultCard(i, scene_data, alternating_color=(i % 2 == 1))
+                
+                # Connect scene card signals (Requirement #1)
+                card.prompt_requested.connect(self._on_scene_prompt_requested)
+                card.recreate_requested.connect(self._on_scene_recreate_requested)
+                card.generate_video_requested.connect(self._on_scene_generate_video_requested)
+                card.regenerate_video_requested.connect(self._on_scene_regenerate_video_requested)
+                
                 self.cards_layout.insertWidget(i - 1, card)
                 self.scene_cards.append(card)
 
@@ -1402,6 +1409,18 @@ class Text2VideoPanelV5(QWidget):
                         "w", encoding="utf-8"
                     ) as f:
                         json.dump(j, f, ensure_ascii=False, indent=2)
+                    
+                    # Auto-save formatted prompt as .txt file (Requirement #2)
+                    try:
+                        from services.labs_flow_service import _build_complete_prompt_text
+                        formatted_prompt = _build_complete_prompt_text(j)
+                        with open(
+                            os.path.join(prdir, f"scene_{i:02d}.txt"),
+                            "w", encoding="utf-8"
+                        ) as f:
+                            f.write(formatted_prompt)
+                    except Exception as txt_err:
+                        self._append_log(f"[WARN] Could not save .txt prompt: {txt_err}")
                 except Exception as e:
                     self._append_log(f"[WARN] Could not save prompt: {e}")
 
@@ -2811,3 +2830,44 @@ class Text2VideoPanelV5(QWidget):
                 self._append_log(f"[INFO] ✅ Đã lưu vào lịch sử: {video_count} video")
         except Exception as e:
             self._append_log(f"[WARN] Không thể lưu lịch sử: {e}")
+    
+    # Scene card signal handlers (Requirement #1)
+    def _on_scene_prompt_requested(self, scene_idx):
+        """Handle prompt view request from scene card"""
+        self._append_log(f"[INFO] Xem prompt cảnh {scene_idx}")
+        # Convert to table row (0-indexed)
+        row = scene_idx - 1
+        if 0 <= row < self.table.rowCount():
+            self._open_prompt_view(row)
+    
+    def _on_scene_recreate_requested(self, scene_idx):
+        """Handle image recreation request from scene card"""
+        self._append_log(f"[INFO] 🔄 Tạo lại ảnh cảnh {scene_idx}")
+        # This would trigger image regeneration for this scene
+        # Implementation depends on whether this panel supports individual image generation
+        QMessageBox.information(
+            self, "Thông báo",
+            f"Tính năng tạo lại ảnh cho cảnh {scene_idx} sẽ được triển khai."
+        )
+    
+    def _on_scene_generate_video_requested(self, scene_idx):
+        """Handle video generation request from scene card"""
+        self._append_log(f"[INFO] 🎬 Tạo video cảnh {scene_idx}")
+        # Trigger video generation for single scene
+        # Check if scene exists in table
+        row = scene_idx - 1
+        if 0 <= row < self.table.rowCount():
+            # Select the row in table
+            self.table.selectRow(row)
+            # Use existing create video logic but for single scene
+            # This would need to be implemented based on panel's video generation workflow
+            QMessageBox.information(
+                self, "Thông báo",
+                f"Chọn cảnh {scene_idx} và sử dụng nút 'Tạo Video' để tạo video cho cảnh này."
+            )
+    
+    def _on_scene_regenerate_video_requested(self, scene_idx):
+        """Handle video regeneration request from scene card (Requirement #1)"""
+        self._append_log(f"[INFO] 🔁 Tạo lại video cảnh {scene_idx}")
+        # Use retry logic for the scene
+        self._retry_failed_scene(scene_idx)
