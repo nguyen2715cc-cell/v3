@@ -1892,16 +1892,16 @@ class VideoBanHangV5(QWidget):
         """Save current video creation to history"""
         try:
             from services.history_service import get_history_service
-            
+
             # Get current settings
             idea = self.ed_idea.toPlainText().strip()
-            
+
             # For VideoBanHang, style is implicit (Sales Video style)
             style = "Video bán hàng"
-            
+
             # Get genre (not directly available in VideoBanHang, use product content if available)
             genre = None
-            
+
             # Get folder path - use project-specific folder
             folder_path = ""
             project_name = (self.ed_name.text() or "").strip()
@@ -1911,11 +1911,11 @@ class VideoBanHangV5(QWidget):
                     folder_path = str(dirs["root"])
                 except Exception:
                     pass
-            
+
             # Fallback to ed_download_path if available
             if not folder_path and self.ed_download_path:
                 folder_path = self.ed_download_path.text().strip()
-            
+
             # Add to history
             if idea and style:
                 history_service = get_history_service()
@@ -1927,11 +1927,11 @@ class VideoBanHangV5(QWidget):
                     folder_path=folder_path,
                     panel_type="videobanhang"
                 )
-                
+
                 # Refresh history widget if available
                 if hasattr(self, 'history_widget') and self.history_widget:
                     self.history_widget.refresh()
-                
+
                 self._append_log(f"[INFO] ✅ Đã lưu vào lịch sử: {video_count} video")
         except Exception as e:
             self._append_log(f"[WARN] Không thể lưu lịch sử: {e}")
