@@ -166,11 +166,7 @@ class VideoGenerationWorker(QThread):
                 )
 
             self.log.emit(
-                "[INFO] Using SEQUENTIAL processing with round-robin account distribution"
-            )
-            self.log.emit(
-                "[WARN] Parallel processing not yet implemented in VideoWorker, "
-                "using sequential"
+                "[INFO] Processing mode: SEQUENTIAL (round-robin account distribution)"
             )
 
         copies = p["copies"]
