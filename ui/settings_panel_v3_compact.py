@@ -337,6 +337,84 @@ class SettingsPanelV3Compact(QWidget):
         # Add Multi-Account section to grid (row 2, spanning both columns)
         accordion_grid.addWidget(multi_acc_section, 2, 0, 1, 2)
 
+        # === WHISK AUTHENTICATION (IMAGE GENERATION) - AccordionSection ===
+        whisk_section = AccordionSection("🎨 Whisk Authentication (Image Generation)")
+        
+        # Add hint
+        hint_whisk = QLabel(
+            "💡 Whisk requires two types of authentication from labs.google.com:\n"
+            "1. Session Token (__Secure-next-auth.session-token cookie)\n"
+            "2. Bearer Token (OAuth token from API requests)\n"
+            "Both can be obtained from browser Developer Tools when using Whisk."
+        )
+        hint_whisk.setFont(FONT_SMALL)
+        hint_whisk.setWordWrap(True)
+        hint_whisk.setStyleSheet("color: #666; font-size: 11px; padding: 8px;")
+        whisk_section.add_content_widget(hint_whisk)
+        
+        # Session Token input
+        session_row = QHBoxLayout()
+        session_row.setSpacing(8)
+        session_label = QLabel("Session Token:")
+        session_label.setFont(FONT_SMALL)
+        session_label.setToolTip(
+            "__Secure-next-auth.session-token from browser cookies.\n"
+            "Get from: labs.google → Developer Tools (F12) → Application → Cookies"
+        )
+        session_row.addWidget(session_label)
+        
+        self.ed_whisk_session = _line('__Secure-next-auth.session-token value')
+        self.ed_whisk_session.setText(self.state.get('labs_session_token', ''))
+        self.ed_whisk_session.setEchoMode(QLineEdit.Password)
+        self.ed_whisk_session.setToolTip(
+            "Session cookie from labs.google.com\n"
+            "1. Open labs.google and login\n"
+            "2. Go to https://labs.google/fx/tools/whisk\n"
+            "3. Open Developer Tools (F12) → Application → Cookies\n"
+            "4. Copy value of '__Secure-next-auth.session-token'"
+        )
+        session_row.addWidget(self.ed_whisk_session, 1)
+        
+        whisk_section.add_content_layout(session_row)
+        
+        # Bearer Token input
+        bearer_row = QHBoxLayout()
+        bearer_row.setSpacing(8)
+        bearer_label = QLabel("Bearer Token:")
+        bearer_label.setFont(FONT_SMALL)
+        bearer_label.setToolTip(
+            "OAuth Bearer token from API requests.\n"
+            "Get from: labs.google → Developer Tools (F12) → Network → Authorization header"
+        )
+        bearer_row.addWidget(bearer_label)
+        
+        self.ed_whisk_bearer = _line('Bearer token (without "Bearer " prefix)')
+        self.ed_whisk_bearer.setText(self.state.get('whisk_bearer_token', ''))
+        self.ed_whisk_bearer.setEchoMode(QLineEdit.Password)
+        self.ed_whisk_bearer.setToolTip(
+            "Bearer token from labs.google.com API requests\n"
+            "1. Open labs.google and login\n"
+            "2. Go to https://labs.google/fx/tools/whisk\n"
+            "3. Open Developer Tools (F12) → Network tab\n"
+            "4. Make a generation request\n"
+            "5. Find request to 'aisandbox-pa.googleapis.com'\n"
+            "6. Copy Authorization header value (without 'Bearer ' prefix)"
+        )
+        bearer_row.addWidget(self.ed_whisk_bearer, 1)
+        
+        whisk_section.add_content_layout(bearer_row)
+        
+        # Note about storage
+        storage_note = QLabel(
+            "📁 Note: All tokens are stored in config.json and ~/.veo_image2video_cfg.json"
+        )
+        storage_note.setFont(FONT_SMALL)
+        storage_note.setStyleSheet("color: #888; font-size: 10px; font-style: italic; padding: 4px;")
+        whisk_section.add_content_widget(storage_note)
+        
+        # Add Whisk section to grid (row 3, spanning both columns)
+        accordion_grid.addWidget(whisk_section, 3, 0, 1, 2)
+
         api_layout.addLayout(accordion_grid)
 
         # Expand/Collapse buttons
@@ -349,7 +427,8 @@ class SettingsPanelV3Compact(QWidget):
             google_section.set_expanded(True),
             eleven_section.set_expanded(True),
             openai_section.set_expanded(True),
-            multi_acc_section.set_expanded(True)
+            multi_acc_section.set_expanded(True),
+            whisk_section.set_expanded(True)
         ])
         toggle_row.addWidget(btn_expand)
 
@@ -359,7 +438,8 @@ class SettingsPanelV3Compact(QWidget):
             google_section.set_expanded(False),
             eleven_section.set_expanded(False),
             openai_section.set_expanded(False),
-            multi_acc_section.set_expanded(False)
+            multi_acc_section.set_expanded(False),
+            whisk_section.set_expanded(False)
         ])
         toggle_row.addWidget(btn_collapse)
         toggle_row.addStretch()
@@ -693,6 +773,9 @@ class SettingsPanelV3Compact(QWidget):
             'default_voice_id': self.ed_voice.text().strip() or '3VnrjnYrskPMDsapTr8X',
             'flow_project_id': self.ed_project.text().strip() or DEFAULT_PROJECT_ID,
             'system_prompts_url': self.ed_sheets_url.text().strip(),  # Enhanced: Save prompts URL
+            # Whisk Authentication
+            'labs_session_token': self.ed_whisk_session.text().strip(),
+            'whisk_bearer_token': self.ed_whisk_bearer.text().strip(),
         }
 
         # ISSUE #4 FIX: Save multi-account manager data
