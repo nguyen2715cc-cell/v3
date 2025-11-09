@@ -43,10 +43,19 @@ def get_session_cookies() -> str:
     # FIXED: Don't fallback to regular API keys - they won't work as session cookies
     # Fail early with clear error message instead of causing 401 errors
     raise WhiskError(
-        "No Whisk session token configured. "
-        "Please configure 'labs_session_token' in config.json with actual "
-        "browser session cookie from https://labs.google/fx/tools/whisk\n"
-        "Note: Regular Google API keys will NOT work - you must use actual session cookies."
+        "Chưa cấu hình session token cho Whisk / No Whisk session token configured.\n"
+        "Vui lòng thêm 'labs_session_token' vào config.json với session cookie thực từ trình duyệt.\n"
+        "Please configure 'labs_session_token' in config.json with actual browser session cookie.\n"
+        "\n"
+        "Hướng dẫn lấy session cookie / How to obtain session cookie:\n"
+        "1. Mở trình duyệt và đăng nhập vào labs.google / Open browser and login to labs.google\n"
+        "2. Truy cập https://labs.google/fx/tools/whisk\n"
+        "3. Mở Developer Tools (F12) → Application → Cookies\n"
+        "4. Copy giá trị của '__Secure-next-auth.session-token' / Copy value of '__Secure-next-auth.session-token'\n"
+        "5. Thêm vào config.json như: \"labs_session_token\": \"<giá trị cookie>\" / Add to config.json as 'labs_session_token'\n"
+        "\n"
+        "LƯU Ý: API keys thông thường KHÔNG hoạt động - phải dùng session cookies thực từ trình duyệt.\n"
+        "NOTE: Regular Google API keys will NOT work - you must use actual session cookies from browser."
     )
 
 
@@ -80,10 +89,24 @@ def get_bearer_token() -> str:
     # FIXED: Don't fallback to regular API keys - they won't work as OAuth bearer tokens
     # Fail early with clear error message instead of causing 401 errors
     raise WhiskError(
-        "No Bearer token configured for Whisk API. "
-        "Please configure 'whisk_bearer_token' in config.json with actual "
-        "OAuth bearer token from https://labs.google API calls\n"
-        "Note: Regular Google API keys will NOT work - you must use actual OAuth bearer tokens."
+        "Chưa cấu hình Bearer token cho Whisk API / No Bearer token configured for Whisk API.\n"
+        "Vui lòng thêm 'whisk_bearer_token' vào config.json với OAuth bearer token thực.\n"
+        "Please configure 'whisk_bearer_token' in config.json with actual OAuth bearer token.\n"
+        "\n"
+        "Hướng dẫn lấy bearer token / How to obtain bearer token:\n"
+        "1. Mở trình duyệt và đăng nhập vào labs.google / Open browser and login to labs.google\n"
+        "2. Truy cập https://labs.google/fx/tools/whisk\n"
+        "3. Mở Developer Tools (F12) → Network tab\n"
+        "4. Thực hiện một yêu cầu tạo ảnh / Make a generation request\n"
+        "5. Tìm request đến 'aisandbox-pa.googleapis.com' / Find request to 'aisandbox-pa.googleapis.com'\n"
+        "6. Copy giá trị Authorization header (bắt đầu bằng 'Bearer ') / Copy Authorization header value (starts with 'Bearer ')\n"
+        "7. Thêm vào config.json như: \"whisk_bearer_token\": \"<token>\" (không cần 'Bearer ' prefix)\n"
+        "   Add to config.json as 'whisk_bearer_token' (without 'Bearer ' prefix)\n"
+        "\n"
+        "LƯU Ý: Bearer tokens thường hết hạn sau một thời gian và cần được làm mới.\n"
+        "NOTE: Bearer tokens typically expire after some time and need to be refreshed.\n"
+        "LƯU Ý: API keys thông thường KHÔNG hoạt động - phải dùng OAuth bearer tokens thực.\n"
+        "NOTE: Regular Google API keys will NOT work - you must use actual OAuth bearer tokens."
     )
 
 
@@ -116,6 +139,7 @@ def caption_image(image_path: str, log_callback: Optional[Callable] = None) -> O
 
         url = "https://labs.google/fx/api/trpc/backbone.captionImage"
 
+        # Get session cookies - this may raise WhiskError if not configured
         cookies = get_session_cookies()
 
         headers = {
@@ -164,8 +188,12 @@ def caption_image(image_path: str, log_callback: Optional[Callable] = None) -> O
             log(f"[ERROR] Could not parse caption from response")
             return None
 
+    except WhiskError as e:
+        # Don't truncate WhiskError messages - they contain important setup instructions
+        log(f"[ERROR] Whisk configuration error: {str(e)}")
+        return None
     except Exception as e:
-        log(f"[ERROR] Caption error: {str(e)[:100]}")
+        log(f"[ERROR] Caption error: {str(e)[:200]}")
         return None
 
 
@@ -198,6 +226,7 @@ def upload_image_whisk(image_path: str, workflow_id: str, session_id: str, log_c
 
         url = "https://labs.google/fx/api/trpc/backbone.uploadImage"
 
+        # Get session cookies - this may raise WhiskError if not configured
         cookies = get_session_cookies()
 
         headers = {
@@ -247,8 +276,12 @@ def upload_image_whisk(image_path: str, workflow_id: str, session_id: str, log_c
     except FileNotFoundError:
         log(f"[ERROR] Image file not found: {image_path}")
         return None
+    except WhiskError as e:
+        # Don't truncate WhiskError messages - they contain important setup instructions
+        log(f"[ERROR] Whisk configuration error: {str(e)}")
+        return None
     except Exception as e:
-        log(f"[ERROR] Whisk upload exception: {str(e)[:100]}")
+        log(f"[ERROR] Whisk upload exception: {str(e)[:200]}")
         return None
 
 
@@ -279,7 +312,7 @@ def run_image_recipe(
             log_callback(msg)
     
     try:
-        # Get bearer token for API authentication
+        # Get bearer token for API authentication - this may raise WhiskError if not configured
         bearer_token = get_bearer_token()
         
         url = "https://aisandbox-pa.googleapis.com/v1/whisk:runImageRecipe"
@@ -369,9 +402,13 @@ def run_image_recipe(
             log(f"[ERROR] Whisk: Failed to parse response - {str(e)}")
             log(f"[DEBUG] Response: {str(data)[:300]}")
             return None
-            
+    
+    except WhiskError as e:
+        # Don't truncate WhiskError messages - they contain important setup instructions
+        log(f"[ERROR] Whisk configuration error: {str(e)}")
+        return None        
     except Exception as e:
-        log(f"[ERROR] Whisk: runImageRecipe failed - {str(e)[:100]}")
+        log(f"[ERROR] Whisk: runImageRecipe failed - {str(e)[:200]}")
         return None
 
 
@@ -401,6 +438,22 @@ def generate_image(prompt: str, model_image: Optional[str] = None, product_image
 
     try:
         log("[INFO] Whisk: Starting generation...")
+        
+        # Early validation: Check if required configuration is available
+        # This provides clear error messages before attempting API calls
+        try:
+            # Test if session cookies are configured (needed for caption and upload)
+            _ = get_session_cookies()
+            # Test if bearer token is configured (needed for image recipe)
+            _ = get_bearer_token()
+        except WhiskError as config_error:
+            # Configuration is missing - provide helpful error message
+            log(f"[ERROR] Whisk configuration missing: {str(config_error)}")
+            log("[INFO] Whisk requires two types of authentication:")
+            log("  1. Session cookie (labs_session_token in config.json)")
+            log("  2. Bearer token (whisk_bearer_token in config.json)")
+            log("[INFO] See README.md for instructions on obtaining these credentials")
+            return None
 
         # Generate IDs
         workflow_id = str(uuid.uuid4())
