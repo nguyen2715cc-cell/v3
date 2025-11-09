@@ -75,6 +75,7 @@ try:
     )
     from ui.widgets.scene_result_card import SceneResultCard
     from ui.workers.video_worker import VideoGenerationWorker  # PR#7: Background video worker
+    from ui.widgets.history_widget import HistoryWidget  # History tab widget
     from utils import config as cfg
 except ImportError as e:
     print(f"⚠️ Import warning: {e}")
@@ -84,6 +85,7 @@ except ImportError as e:
     _ASPECT_MAP = {"16:9": "VIDEO_ASPECT_RATIO_LANDSCAPE"}
     SceneResultCard = None
     VideoGenerationWorker = None  # PR#7: Fallback for missing worker
+    HistoryWidget = None  # Fallback for missing history widget
 
 # V5 STYLING
 FONT_H2 = QFont("Segoe UI", 15, QFont.Bold)  # +2px, bold
@@ -996,6 +998,21 @@ class Text2VideoPanelV5(QWidget):
         social_layout.addWidget(scroll)
         self.result_tabs.addTab(social_widget, "📱 Social")
 
+        # Tab 6: History - Video creation history
+        if HistoryWidget:
+            self.history_widget = HistoryWidget(panel_type="text2video", parent=self)
+            self.result_tabs.addTab(self.history_widget, "📜 Lịch sử")
+        else:
+            # Placeholder if HistoryWidget is not available
+            history_placeholder = QWidget()
+            history_placeholder_layout = QVBoxLayout(history_placeholder)
+            placeholder_label = QLabel("⚠️ Lịch sử không khả dụng")
+            placeholder_label.setAlignment(Qt.AlignCenter)
+            placeholder_label.setStyleSheet("color: #999; font-size: 13px;")
+            history_placeholder_layout.addWidget(placeholder_label)
+            self.result_tabs.addTab(history_placeholder, "📜 Lịch sử")
+            self.history_widget = None
+
         # OCEAN BLUE STYLING
         self.result_tabs.setStyleSheet("""
             QTabBar::tab {
@@ -1673,6 +1690,9 @@ class Text2VideoPanelV5(QWidget):
             self.video_worker = None
 
         self._append_log(f"[INFO] ✅ Video generation complete: {len(video_paths)} videos generated")
+        
+        # Save to history
+        self._save_to_history(len(video_paths))
 
     def _on_video_error(self, error_msg):
         """PR#7: Handle video generation errors"""
@@ -2739,3 +2759,47 @@ class Text2VideoPanelV5(QWidget):
             self._append_log(f"[INFO] Đang mở video: {os.path.basename(video_path)}")
         except Exception as e:
             self._append_log(f"[ERR] Không thể mở video: {e}")
+    
+    def _save_to_history(self, video_count: int = 0):
+        """Save current video creation to history"""
+        try:
+            from services.history_service import get_history_service
+            
+            # Get current settings
+            idea = self.ed_idea.toPlainText().strip()
+            style_text = self.cb_style.currentText()
+            
+            # Get genre (domain/topic)
+            domain = self.cb_domain.currentText() if self.cb_domain.currentData() else None
+            topic = self.cb_topic.currentText() if self.cb_topic.currentData() else None
+            genre = None
+            if domain and domain != "(Không chọn)":
+                genre = domain
+                if topic and topic != "(Chọn lĩnh vực để load chủ đề)":
+                    genre = f"{domain} - {topic}"
+            
+            # Get folder path
+            folder_path = ""
+            if cfg:
+                state = cfg.load()
+                folder_path = state.get("download_root", "")
+            
+            # Add to history
+            if idea and style_text:
+                history_service = get_history_service()
+                history_service.add_entry(
+                    idea=idea,
+                    style=style_text,
+                    genre=genre,
+                    video_count=video_count,
+                    folder_path=folder_path,
+                    panel_type="text2video"
+                )
+                
+                # Refresh history widget if available
+                if hasattr(self, 'history_widget') and self.history_widget:
+                    self.history_widget.refresh()
+                
+                self._append_log(f"[INFO] ✅ Đã lưu vào lịch sử: {video_count} video")
+        except Exception as e:
+            self._append_log(f"[WARN] Không thể lưu lịch sử: {e}")

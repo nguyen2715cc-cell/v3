@@ -40,12 +40,14 @@ try:
     from services import sales_video_service as svc
     from ui.widgets.model_selector import ModelSelectorWidget
     from ui.widgets.scene_result_card import SceneResultCard
+    from ui.widgets.history_widget import HistoryWidget  # History tab widget
     from ui.workers.script_worker import ScriptWorker
     from utils.image_utils import convert_to_bytes
 except ImportError as e:
     print(f"⚠️ Import warning: {e}")
     sscript = None
     svc = None
+    HistoryWidget = None  # Fallback for missing history widget
 
 # V5 Styling
 FONT_H2 = QFont("Segoe UI", 15, QFont.Bold)
@@ -879,6 +881,23 @@ class VideoBanHangV5(QWidget):
         # Tab 4: Social
         social_tab = self._build_social_tab()
         self.results_tabs.addTab(social_tab, "📱 Social")
+
+        # Tab 5: History - Video creation history
+        if HistoryWidget:
+            self.history_widget = HistoryWidget(panel_type="videobanhang", parent=self)
+            self.results_tabs.addTab(self.history_widget, "📜 Lịch sử")
+        else:
+            # Placeholder if HistoryWidget is not available
+            from PyQt5.QtWidgets import QLabel
+            from PyQt5.QtCore import Qt
+            history_placeholder = QWidget()
+            history_placeholder_layout = QVBoxLayout(history_placeholder)
+            placeholder_label = QLabel("⚠️ Lịch sử không khả dụng")
+            placeholder_label.setAlignment(Qt.AlignCenter)
+            placeholder_label.setStyleSheet("color: #999; font-size: 13px;")
+            history_placeholder_layout.addWidget(placeholder_label)
+            self.results_tabs.addTab(history_placeholder, "📜 Lịch sử")
+            self.history_widget = None
 
         # OCEAN BLUE STYLING
         self.results_tabs.setStyleSheet("""
@@ -1767,6 +1786,9 @@ class VideoBanHangV5(QWidget):
         # Auto-download if enabled
         if self.chk_auto_download and self.chk_auto_download.isChecked():
             self._auto_download_video(video_path)
+        
+        # Save to history
+        self._save_to_history(video_count=1)
 
     def stop_processing(self):
         """Stop all workers"""
@@ -1865,6 +1887,45 @@ class VideoBanHangV5(QWidget):
                 subprocess.Popen(['xdg-open', str(folder_path)])
         except Exception as e:
             self._append_log(f"⚠ Không thể mở thư mục: {e}")
+    
+    def _save_to_history(self, video_count: int = 0):
+        """Save current video creation to history"""
+        try:
+            from services.history_service import get_history_service
+            
+            # Get current settings
+            idea = self.ed_idea.toPlainText().strip()
+            
+            # For VideoBanHang, style is implicit (Sales Video style)
+            style = "Video bán hàng"
+            
+            # Get genre (not directly available in VideoBanHang, use product content if available)
+            genre = None
+            
+            # Get folder path
+            folder_path = ""
+            if self.ed_download_path:
+                folder_path = self.ed_download_path.text().strip()
+            
+            # Add to history
+            if idea and style:
+                history_service = get_history_service()
+                history_service.add_entry(
+                    idea=idea,
+                    style=style,
+                    genre=genre,
+                    video_count=video_count,
+                    folder_path=folder_path,
+                    panel_type="videobanhang"
+                )
+                
+                # Refresh history widget if available
+                if hasattr(self, 'history_widget') and self.history_widget:
+                    self.history_widget.refresh()
+                
+                self._append_log(f"[INFO] ✅ Đã lưu vào lịch sử: {video_count} video")
+        except Exception as e:
+            self._append_log(f"[WARN] Không thể lưu lịch sử: {e}")
 
 
 # END OF FILE
