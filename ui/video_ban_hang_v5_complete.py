@@ -178,7 +178,9 @@ class ImageGenerationWorker(QThread):
                 return
 
             aspect_ratio = self.cfg.get('ratio', '9:16')
-            model = 'gemini' if 'Gemini' in self.cfg.get('image_model', 'Gemini') else 'imagen_4'
+            # When Whisk is selected, use Gemini as fallback (not imagen_4)
+            image_model_selection = self.cfg.get('image_model', 'Gemini')
+            model = 'gemini' if image_model_selection in ('Gemini', 'Whisk') else 'imagen_4'
             whisk_aspect_ratio = convert_aspect_ratio_to_whisk(aspect_ratio)
 
             self.progress.emit(f"[INFO] Sequential mode: {len(api_keys)} API keys, model: {model}")
@@ -227,7 +229,7 @@ class ImageGenerationWorker(QThread):
 
                 if img_data is None and image_gen_service:
                     try:
-                        self.progress.emit(f"Cảnh {scene.get('index')}: Dùng Gemini...")
+                        self.progress.emit(f"Cảnh {scene.get('index')}: Dùng {model}...")
 
                         # Enhanced: Respect rate limit for subsequent requests
                         img_data_url = image_gen_service.generate_image_with_rate_limit(
@@ -242,7 +244,7 @@ class ImageGenerationWorker(QThread):
                         if img_data_url and convert_to_bytes:
                             img_data, error = convert_to_bytes(img_data_url)
                             if img_data:
-                                self.progress.emit(f"Cảnh {scene.get('index')}: Gemini ✓")
+                                self.progress.emit(f"Cảnh {scene.get('index')}: {model} ✓")
                             else:
                                 self.progress.emit(f"Cảnh {scene.get('index')}: {error}")
                         else:
@@ -328,7 +330,9 @@ class ImageGenerationWorker(QThread):
             self.progress.emit(f"🚀 Parallel mode: {num_accounts} accounts")
 
             aspect_ratio = self.cfg.get('ratio', '9:16')
-            model = 'gemini' if 'Gemini' in self.cfg.get('image_model', 'Gemini') else 'imagen_4'
+            # When Whisk is selected, use Gemini as fallback (not imagen_4)
+            image_model_selection = self.cfg.get('image_model', 'Gemini')
+            model = 'gemini' if image_model_selection in ('Gemini', 'Whisk') else 'imagen_4'
             whisk_aspect_ratio = convert_aspect_ratio_to_whisk(aspect_ratio)
 
             if self.character_bible and hasattr(self.character_bible, 'characters'):
