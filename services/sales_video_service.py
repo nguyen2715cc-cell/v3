@@ -19,7 +19,15 @@ def default_project_name(now=None, base_dir=None)->str:
     return f"{d}-{idx}"
 
 def ensure_project_dirs(project_name:str, base_dir=None)->Dict[str, Path]:
-    root = Path(base_dir or _cfg().get('download_root') or Path.home() / 'Downloads') / project_name
+    # Sanitize project name for cross-platform compatibility
+    try:
+        from utils.filename_sanitizer import sanitize_project_name
+        sanitized_name = sanitize_project_name(project_name)
+    except ImportError:
+        # Fallback if sanitizer not available
+        sanitized_name = project_name
+    
+    root = Path(base_dir or _cfg().get('download_root') or Path.home() / 'Downloads') / sanitized_name
     (root / "Video").mkdir(parents=True, exist_ok=True)
     (root / "Prompt").mkdir(parents=True, exist_ok=True)
     (root / "Ảnh xem trước").mkdir(parents=True, exist_ok=True)
