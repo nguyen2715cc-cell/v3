@@ -317,6 +317,62 @@ class StoryboardView(QWidget):
 
                 retry_btn.clicked.connect(on_retry_click)
                 card_layout.addWidget(retry_btn)
+            
+            # Issue #3: Add regenerate button to Storyboard (always visible, not just for failed)
+            regen_btn = QPushButton("🔁 Tạo lại video")
+            regen_btn.setMinimumHeight(28)
+            regen_btn.setStyleSheet("""
+                QPushButton {
+                    background: #2196F3;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    font-weight: bold;
+                    font-size: 11px;
+                    padding: 4px 8px;
+                }
+                QPushButton:hover { background: #1976D2; }
+            """)
+
+            # Connect to regenerate method
+            def on_regenerate_click():
+                print(f"[DEBUG] Regenerate button clicked for scene {scene_num}")
+                if hasattr(self.main_panel, '_regenerate_scene_video'):
+                    self.main_panel._append_log(f"[INFO] 🔁 Regenerate button clicked for scene {scene_num}")
+                    self.main_panel._regenerate_scene_video(scene_num)
+                else:
+                    print("[ERROR] main_panel does not have _regenerate_scene_video method!")
+
+            regen_btn.clicked.connect(on_regenerate_click)
+            card_layout.addWidget(regen_btn)
+        else:
+            # No videos yet - show a "Generate Video" button
+            gen_btn = QPushButton("🎬 Tạo Video")
+            gen_btn.setMinimumHeight(28)
+            gen_btn.setStyleSheet("""
+                QPushButton {
+                    background: #4CAF50;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    font-weight: bold;
+                    font-size: 11px;
+                    padding: 4px 8px;
+                }
+                QPushButton:hover { background: #388E3C; }
+            """)
+
+            # Connect to regenerate method (same as generate)
+            def on_generate_click():
+                print(f"[DEBUG] Generate button clicked for scene {scene_num}")
+                if hasattr(self.main_panel, '_regenerate_scene_video'):
+                    self.main_panel._append_log(f"[INFO] 🎬 Generate button clicked for scene {scene_num}")
+                    self.main_panel._regenerate_scene_video(scene_num)
+                else:
+                    print("[ERROR] main_panel does not have _regenerate_scene_video method!")
+
+            gen_btn.clicked.connect(on_generate_click)
+            card_layout.addWidget(gen_btn)
 
         card.scene_num = scene_num
         card.mousePressEvent = lambda e: self.scene_clicked.emit(scene_num)
@@ -2869,5 +2925,176 @@ class Text2VideoPanelV5(QWidget):
     def _on_scene_regenerate_video_requested(self, scene_idx):
         """Handle video regeneration request from scene card (Requirement #1)"""
         self._append_log(f"[INFO] 🔁 Tạo lại video cảnh {scene_idx}")
-        # Use retry logic for the scene
-        self._retry_failed_scene(scene_idx)
+        # Use regenerate logic for the scene (works for all videos, not just failed)
+        self._regenerate_scene_video(scene_idx)
+    
+    def _regenerate_scene_video(self, scene_num, num_copies=None):
+        """
+        Regenerate video(s) for a specific scene.
+        This works for all videos (successful or failed), allowing users to generate
+        new variations with the same settings.
+        
+        Args:
+            scene_num: Scene number to regenerate (1-indexed)
+            num_copies: Number of video copies to generate. If None, uses default from UI
+        """
+        self._append_log("[INFO] ═══════════════════════════════════════")
+        self._append_log(f"[INFO] 🔁 REGENERATE REQUESTED for Scene {scene_num}")
+        self._append_log("[INFO] ═══════════════════════════════════════")
+
+        if scene_num < 1 or scene_num > self.table.rowCount():
+            self._append_log(f"[ERR] Invalid scene number: {scene_num}")
+            QMessageBox.warning(self, 'Lỗi', f'Số cảnh không hợp lệ: {scene_num}')
+            return
+
+        # Get number of copies to generate
+        if num_copies is None:
+            num_copies = self._t2v_get_copies()
+        
+        # Confirmation dialog
+        reply = QMessageBox.question(
+            self, 'Xác nhận tạo lại video',
+            f'Tạo lại {num_copies} video cho cảnh {scene_num}?\n\n'
+            f'Video mới sẽ được tạo với cùng phong cách và cài đặt.\n'
+            f'Prompt sẽ được gửi đến Google Labs Flow API.',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+
+        if reply == QMessageBox.No:
+            self._append_log(f"[INFO] User cancelled regenerate for scene {scene_num}")
+            return
+
+        self._append_log("[INFO] ✓ User confirmed regenerate")
+        self._append_log(f"[INFO] Đang tạo lại {num_copies} video cho cảnh {scene_num}...")
+
+        # Get scene data from table
+        row = scene_num - 1
+        vi = self.table.item(row, 1).text() if self.table.item(row, 1) else ""
+        tgt = self.table.item(row, 2).text() if self.table.item(row, 2) else vi
+
+        # Log scene data
+        vi_preview = f"{vi[:50]}..." if len(vi) > 50 else vi
+        tgt_preview = f"{tgt[:50]}..." if len(tgt) > 50 else tgt
+        self._append_log(f"[INFO] Scene data - VI: {vi_preview}")
+        self._append_log(f"[INFO] Scene data - TGT: {tgt_preview}")
+
+        # Get current settings
+        lang_code = self.cb_out_lang.currentData()
+        ratio_key = self.cb_ratio.currentText()
+        ratio = _ASPECT_MAP.get(ratio_key, "VIDEO_ASPECT_RATIO_LANDSCAPE")
+        style = self.cb_style.currentData() or "anime_2d"  # Use data key for consistency
+
+        # Log settings
+        self._append_log(f"[INFO] Settings - Lang: {lang_code}, Ratio: {ratio_key}, Style: {style}")
+
+        character_bible_basic = (
+            self._script_data.get("character_bible", [])
+            if self._script_data else []
+        )
+        voice_settings = self.get_voice_settings()
+
+        location_ctx = None
+        dialogues = []
+        if self._script_data and "scenes" in self._script_data:
+            scene_list = self._script_data["scenes"]
+            if row < len(scene_list):
+                if extract_location_context:
+                    location_ctx = extract_location_context(scene_list[row])
+                dialogues = scene_list[row].get("dialogues", [])
+
+        # Build prompt JSON for regeneration
+        if build_prompt_json:
+            tts_provider = self.cb_tts_provider.currentData()
+            voice_id = self.ed_custom_voice.text().strip() or self.cb_voice.currentData()
+            voice_name = (
+                self.cb_voice.currentText()
+                if not self.ed_custom_voice.text().strip()
+                else ""
+            )
+            domain = self.cb_domain.currentData() or None
+            topic = self.cb_topic.currentData() or None
+            quality_text = (
+                self.cb_quality.currentText() if self.cb_quality.isVisible() else None
+            )
+
+            # CRITICAL: Get base_seed and style_seed from context for consistency
+            # This ensures regenerated videos maintain the same character and style
+            base_seed = self._ctx.get("base_seed") if self._ctx else None
+            style_seed = self._ctx.get("style_seed") if self._ctx else None
+
+            self._append_log(f"[INFO] Building prompt JSON for scene {scene_num}...")
+            self._append_log(f"[INFO] Using base_seed: {base_seed}, style_seed: {style_seed}")
+
+            j = build_prompt_json(
+                scene_num, vi, tgt, lang_code, ratio_key, style,
+                character_bible=character_bible_basic,
+                enhanced_bible=self._character_bible,
+                voice_settings=voice_settings,
+                location_context=location_ctx,
+                tts_provider=tts_provider,
+                voice_id=voice_id,
+                voice_name=voice_name,
+                domain=domain,
+                topic=topic,
+                quality=quality_text,
+                dialogues=dialogues,
+                base_seed=base_seed,  # Use same seed for character consistency
+                style_seed=style_seed  # Use same seed for style consistency
+            )
+
+            # Log prompt JSON size
+            prompt_json_str = json.dumps(j, ensure_ascii=False, indent=2)
+            self._append_log(f"[INFO] Prompt JSON size: {len(prompt_json_str)} chars")
+
+            # Include actual_scene_num so VideoWorker uses correct scene number
+            scenes = [{
+                "prompt": prompt_json_str,
+                "aspect": ratio,
+                "actual_scene_num": scene_num  # CRITICAL: Pass actual scene number for regenerate
+            }]
+        else:
+            self._append_log("[ERR] build_prompt_json not available")
+            QMessageBox.critical(self, 'Lỗi', 'Không thể tạo prompt JSON')
+            return
+
+        model_display = self.cb_model.currentText()
+        model_key = (
+            get_model_key_from_display(model_display)
+            if get_model_key_from_display
+            else model_display
+        )
+
+        # Log model info
+        self._append_log(f"[INFO] Using model: {model_display} (key: {model_key})")
+
+        payload = dict(
+            scenes=scenes,
+            copies=num_copies,
+            model_key=model_key,
+            title=self._title,
+            dir_videos=self._ctx.get("dir_videos", ""),
+            upscale_4k=self.cb_upscale.isChecked(),
+            auto_download=self.cb_auto_download.isChecked(),
+            quality=self.cb_quality.currentText()
+        )
+
+        if not payload["dir_videos"]:
+            self._append_log("[ERR] Không tìm thấy thư mục video")
+            QMessageBox.critical(self, 'Lỗi', 'Không tìm thấy thư mục video')
+            return
+
+        # Log payload info
+        self._append_log(
+            f"[INFO] Payload - Copies: {payload['copies']}, Model: {payload['model_key']}"
+        )
+        self._append_log(f"[INFO] Payload - Dir: {payload['dir_videos']}")
+        self._append_log(
+            f"[INFO] Bắt đầu tạo {num_copies} video mới cho cảnh {scene_num}..."
+        )
+        self._append_log("[INFO] Sending to Google Labs Flow API...")
+
+        self._run_in_thread("video", payload)
+
+        # Final log
+        self._append_log("[INFO] Regenerate request sent to worker thread")
