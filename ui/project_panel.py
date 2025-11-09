@@ -299,6 +299,8 @@ class DownloadWorker(QObject):
             vids=j.get("video_by_idx") or []
             if not vids: done+=1; self.progress.emit(int(done*100/total), f"Đã tải {ok}/{attempts}"); all_success=False; continue
             j.setdefault("downloaded_idx", set())
+            # Get bearer token for this job (multi-account support)
+            bearer_token = j.get("bearer_token")
             for i,u in enumerate(vids, start=1):
                 if not u: continue
                 if self.only_missing and (i in j["downloaded_idx"]): continue
@@ -307,10 +309,17 @@ class DownloadWorker(QObject):
                 dest=os.path.join(self.outdir, f"{base}.mp4")
                 try:
                     if self.video_downloader:
-                        self.video_downloader.download(u, dest)
+                        self.video_downloader.download(u, dest, bearer_token=bearer_token)
                     else:
                         import requests
-                        with requests.get(u, stream=True, timeout=300, allow_redirects=True) as r:
+                        # Include bearer token in headers if available
+                        headers = {}
+                        if bearer_token:
+                            headers = {
+                                "authorization": f"Bearer {bearer_token}",
+                                "user-agent": "Mozilla/5.0"
+                            }
+                        with requests.get(u, stream=True, timeout=300, allow_redirects=True, headers=headers) as r:
                             r.raise_for_status(); open(dest,"wb").write(r.content)
                     j["downloaded_idx"].add(i); j.setdefault("local_paths",[]).append(dest); j["status"]="DOWNLOADED"; ok+=1
                     # nếu đủ số lượng video mong đợi -> set thời gian hoàn thành
