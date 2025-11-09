@@ -19,14 +19,33 @@ def get_session_cookies() -> str:
     """
     Get session cookies from config
     Returns cookie string for requests
-    Uses Google Labs Flow tokens (same as bearer token)
+    
+    CRITICAL: This requires actual browser session cookies from labs.google, 
+    NOT regular API keys. Session cookies must be extracted from browser after
+    logging into https://labs.google/fx/tools/whisk
+    
+    To obtain session cookies:
+    1. Open browser and login to labs.google
+    2. Navigate to https://labs.google/fx/tools/whisk
+    3. Open Developer Tools (F12) -> Application -> Cookies
+    4. Copy the value of "__Secure-next-auth.session-token"
+    5. Add to config as 'labs_session_token'
     """
     from services.core.key_manager import get_all_keys
+    from services.core.config import load as load_config
     
-    # Use labs tokens (Google Labs Flow tokens) for session
+    # Try to get session token from config
+    cfg = load_config()
+    session_token = cfg.get('labs_session_token') or cfg.get('whisk_session_token')
+    
+    if session_token:
+        return f"__Secure-next-auth.session-token={session_token}"
+    
+    # Fallback: try labs tokens (may not work with 401 errors)
     labs_tokens = get_all_keys('labs')
     if labs_tokens:
         # Session token format: __Secure-next-auth.session-token=...
+        # Note: Using labs bearer tokens as session cookies will likely fail
         return f"__Secure-next-auth.session-token={labs_tokens[0]}"
     
     # Fall back to google keys if no labs tokens
@@ -34,18 +53,46 @@ def get_session_cookies() -> str:
     if google_keys:
         return f"__Secure-next-auth.session-token={google_keys[0]}"
     
-    raise WhiskError("No Whisk session token configured (labs/google API key required)")
+    raise WhiskError(
+        "No Whisk session token configured. "
+        "Please configure 'labs_session_token' in config.json with actual "
+        "browser session cookie from https://labs.google/fx/tools/whisk"
+    )
 
 
 def get_bearer_token() -> str:
     """
     Get bearer token (OAuth token) from config for Whisk API
+    
+    CRITICAL: This requires actual OAuth bearer token from Google Labs API,
+    NOT regular API keys. Bearer tokens are obtained through OAuth flow.
+    
+    To obtain bearer token:
+    1. Open browser and login to labs.google
+    2. Navigate to https://labs.google/fx/tools/whisk
+    3. Open Developer Tools (F12) -> Network tab
+    4. Make a generation request
+    5. Find request to "aisandbox-pa.googleapis.com"
+    6. Copy Authorization header value (starts with "Bearer ")
+    7. Add to config as 'whisk_bearer_token' (without "Bearer " prefix)
+    
+    Note: Bearer tokens typically expire after some time and need to be refreshed.
     """
     from services.core.key_manager import get_all_keys
+    from services.core.config import load as load_config
     
-    # Try to get labs tokens (bearer tokens for aisandbox API)
+    # Try to get bearer token from config
+    cfg = load_config()
+    bearer_token = cfg.get('whisk_bearer_token') or cfg.get('labs_bearer_token')
+    
+    if bearer_token:
+        return bearer_token
+    
+    # Fallback: try labs tokens (may not work with 401 errors)
     labs_tokens = get_all_keys('labs')
     if labs_tokens:
+        # Note: Using labs API keys as bearer tokens will likely fail
+        # Bearer tokens need to be OAuth tokens, not API keys
         return labs_tokens[0]
     
     # Fall back to google keys if no labs tokens
@@ -53,7 +100,11 @@ def get_bearer_token() -> str:
     if google_keys:
         return google_keys[0]
     
-    raise WhiskError("No Bearer token (labs/google API key) configured for Whisk")
+    raise WhiskError(
+        "No Bearer token configured for Whisk API. "
+        "Please configure 'whisk_bearer_token' in config.json with actual "
+        "OAuth bearer token from https://labs.google API calls"
+    )
 
 
 def caption_image(image_path: str, log_callback: Optional[Callable] = None) -> Optional[str]:

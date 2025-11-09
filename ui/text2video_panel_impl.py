@@ -923,6 +923,26 @@ class _Worker(QObject):
                 }
                 with open(os.path.join(dir_script, "domain_topic.json"), "w", encoding="utf-8") as f:
                     json.dump(domain_info, f, ensure_ascii=False, indent=2)
+            
+            # Issue #3: Export scene dialogues to SRT file
+            scenes = data.get("scenes", [])
+            if scenes:
+                try:
+                    from services.srt_export_service import export_scene_dialogues_to_srt
+                    srt_path = export_scene_dialogues_to_srt(
+                        scenes=scenes,
+                        script_folder=dir_script,
+                        filename="dialogues.srt",
+                        scene_duration=p.get("duration", 8) // len(scenes) if len(scenes) > 0 else 8,
+                        language=p.get("out_lang_code", "vi")
+                    )
+                    if srt_path:
+                        self.log.emit(f"[INFO] ✓ Đã xuất SRT: {os.path.basename(srt_path)}")
+                    else:
+                        self.log.emit(f"[INFO] Không có lời thoại để xuất SRT")
+                except Exception as srt_err:
+                    self.log.emit(f"[WARN] Không thể xuất SRT: {srt_err}")
+                    
         except Exception as e:
             self.log.emit(f"[WARN] Lưu kịch bản thất bại: {e}")
 
