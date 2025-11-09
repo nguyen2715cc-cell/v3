@@ -48,10 +48,140 @@ LANGUAGE_NAMES = {
     'id': 'Indonesian (Bahasa Indonesia)'
 }
 
-def _get_style_specific_guidance(style):
-    """Get specific guidance based on video style to better match user's idea"""
+def _detect_animal_content(idea, topic=None):
+    """Detect if the content is about animals/wildlife
+    
+    Args:
+        idea: Video idea text
+        topic: Optional topic name
+    
+    Returns:
+        bool: True if content is about animals/wildlife
+    """
+    if not idea:
+        return False
+    
+    # Check topic first
+    if topic and ("động vật" in topic.lower() or "thú cưng" in topic.lower() or "animal" in topic.lower() or "pet" in topic.lower() or "wildlife" in topic.lower()):
+        return True
+    
+    # Common animal-related keywords in Vietnamese and English
+    # Use word boundaries for better matching
+    animal_keywords = [
+        # Vietnamese - specific animals
+        "động vật", "thú hoang", "thú cưng", "thú nuôi",
+        "sư tử", "hổ", "voi", "khỉ", "gấu", "cáo", "chó sói",
+        "hươu", "nai", "chuột", "thỏ", "chó hoang", "mèo hoang",
+        "chim cánh cụt", "đại bàng", "diều hâu", "chim ưng",
+        "cá heo", "cá voi", "cá mập", "bạch tuộc", "rùa biển", "hải cẩu", "sư tử biển",
+        "rắn", "trăn", "thằn lằn", "cá sấu", "kỳ đà", "rồng komodo",
+        "côn trùng", "bướm", "nhện",
+        "động vật hoang dã", "sinh vật hoang dã", "loài vật", "bầy đàn",
+        "tự nhiên hoang dã", "thiên nhiên hoang dã", "thế giới động vật",
+        "chó", "mèo", "chó con", "mèo con", "cún", "miu",
+        # English
+        "wildlife", "wild animal", "nature documentary",
+        "lion", "tiger", "elephant", "monkey", "bear", "fox", "wolf",
+        "deer", "rabbit", "wild cat", "wild dog",
+        "eagle", "hawk", "owl", "penguin",
+        "dolphin", "whale", "shark", "octopus", "sea turtle", "seal", "sea lion",
+        "snake", "python", "lizard", "crocodile", "alligator", "komodo dragon",
+        "butterfly", "spider",
+        "pack", "herd", "flock", "pride",
+        # Pets
+        "puppy", "kitten", "dog", "cat", "pet",
+    ]
+    
+    # Normalize and check with word boundaries
+    idea_lower = idea.lower()
+    
+    # Special case: exclude "python" if it's in a programming context
+    if "python" in idea_lower and any(prog_word in idea_lower for prog_word in ["lập trình", "programming", "code", "tutorial", "học"]):
+        # This is about Python programming, not python snake
+        pass
+    else:
+        # Check for "python" as the snake
+        if " python " in f" {idea_lower} ":
+            return True
+    
+    # Use more precise matching - check if keyword appears as separate word or with spaces
+    for keyword in animal_keywords:
+        # Skip "python" as it's handled above
+        if keyword == "python":
+            continue
+        # Check if keyword exists with word boundaries (spaces, start/end of string)
+        if f" {keyword} " in f" {idea_lower} " or idea_lower.startswith(f"{keyword} ") or idea_lower.endswith(f" {keyword}"):
+            return True
+    
+    return False
+
+
+def _get_style_specific_guidance(style, idea=None, topic=None):
+    """Get specific guidance based on video style to better match user's idea
+    
+    Args:
+        style: Video style
+        idea: Optional video idea text for detecting animal content
+        topic: Optional topic name for detecting animal content
+    
+    Returns:
+        str: Style-specific guidance text
+    """
     # Normalize style once for all checks
     style_normalized = style.lower()
+    
+    # Check if content is about animals/wildlife - HIGHEST PRIORITY
+    if _detect_animal_content(idea, topic):
+        return """
+═══════════════════════════════════════════════════════════════
+🦁 PHONG CÁCH: PHIM TÀI LIỆU ĐỘNG VẬT (WILDLIFE DOCUMENTARY)
+═══════════════════════════════════════════════════════════════
+
+[VAI TRÒ & PHONG CÁCH]
+Bạn là một đạo diễn phim tài liệu chuyên nghiệp về thế giới tự nhiên, theo phong cách của BBC Earth hoặc National Geographic. 
+Mọi video bạn tạo ra đều phải đạt tiêu chuẩn điện ảnh (cinematic) và ưu tiên hàng đầu là chủ nghĩa hiện thực và tính chính xác về mặt sinh học.
+
+[CHỈ THỊ CỐT LÕI VỀ ĐỘNG VẬT]
+Khi tạo video về động vật, hãy tuân thủ nghiêm ngặt hình thái (ngoại hình) và động học (chuyển động) tự nhiên của loài đó. 
+Chúng phải hành xử và di chuyển như động vật ngoài đời thực.
+
+[RÀNG BUỘC NGHIÊM NGẶT - KHÔNG NHÂN HÓA NGOẠI HÌNH]
+Tuyệt đối CẤM tạo ra bất kỳ hình thức nhân hóa ngoại hình nào. Điều này bao gồm, nhưng không giới hạn ở:
+
+❌ CẤM TUYỆT ĐỐI:
+• Tạo động vật đi bằng hai chân (trừ khi đó là hành vi tự nhiên của loài, như chim cánh cụt, gấu đứng lên)
+• Gắn khuôn mặt người, biểu cảm của con người (như cười nhếch mép, nháy mắt có chủ ý) lên động vật
+• Thêm bàn tay, ngón tay của người vào động vật
+• Tạo ra các đặc điểm lai tạo, phi tự nhiên, quái dị (grotesque, hybrid, mutant)
+• Cho động vật mặc quần áo, đeo kính, hoặc sử dụng các vật dụng của con người (trừ khi prompt của người dùng yêu cầu rõ ràng)
+• Phong cách hoạt hình, anime, hoặc 3D-cartoon
+
+✅ BẮT BUỘC:
+• Động vật PHẢI di chuyển theo cách tự nhiên của loài (bốn chân, bò, bơi, bay...)
+• Hành vi PHẢI thực tế: săn mồi, ăn uống, nghỉ ngơi, chơi đùa theo bản năng
+• Biểu cảm PHẢI tự nhiên: không có nụ cười kiểu người, chỉ có biểu hiện tự nhiên của loài
+• Môi trường sống PHẢI chính xác: rừng nhiệt đới, đại dương, sa mạc, cực địa theo đúng loài
+• Ánh sáng và màu sắc PHẢI tự nhiên, cinematic như phim tài liệu BBC/NatGeo
+
+[ĐỊNH HƯỚNG SÁNG TẠO]
+Nếu người dùng yêu cầu một hành động (như "con mèo nói chuyện"), hãy thể hiện nó một cách tự nhiên nhất có thể:
+• ✅ ĐÚNG: Quay cận cảnh một con mèo đang kêu "meow" về phía máy quay
+• ❌ SAI: Một con mèo cử động miệng như người
+
+[CẤU TRÚC PHIM TÀI LIỆU]
+- Structure: Introduction → Behavior/Hunt → Challenge → Resolution/Survival
+- Camera: Wide establishing shots, close-up details, slow motion action
+- Narration: Educational, respectful, David Attenborough style
+- Visual: Natural lighting, real habitats, authentic animal behavior
+- Focus: Biology, ecology, survival, natural beauty
+- Tone: Majestic, educational, awe-inspiring
+
+[YÊU CẦU KỸ THUẬT]
+• Mỗi cảnh PHẢI mô tả chính xác loài, môi trường, hành vi
+• Camera angles phải như phim tài liệu thực: wide landscape, telephoto wildlife shots
+• Không được có yếu tố hư cấu phi thực tế
+• Ưu tiên tính giáo dục và chính xác khoa học
+"""
 
     # Use early returns for better performance
     if "vlog" in style_normalized or "cá nhân" in style_normalized:
@@ -211,12 +341,12 @@ def _get_style_specific_guidance(style):
 """
 
 
-def _schema_prompt(idea, style_vi, out_lang, n, per, mode):
+def _schema_prompt(idea, style_vi, out_lang, n, per, mode, topic=None):
     # Get target language display name
     target_language = LANGUAGE_NAMES.get(out_lang, 'Vietnamese (Tiếng Việt)')
 
-    # Get style-specific guidance
-    style_guidance = _get_style_specific_guidance(style_vi)
+    # Get style-specific guidance with animal detection
+    style_guidance = _get_style_specific_guidance(style_vi, idea=idea, topic=topic)
 
     # Build language instruction
     language_instruction = f"""
@@ -328,13 +458,50 @@ Mỗi nhân vật PHẢI:
 - **key_trait**: Tính cách cốt lõi nhất quán (ví dụ: "Dũng cảm nhưng bốc đồng", "Thông minh nhưng nghi ngờ")
 - **motivation**: Động lực sâu thẳm, thúc đẩy hành động (ví dụ: "Chứng minh bản thân", "Bảo vệ người thân")
 - **default_behavior**: Phản ứng tự nhiên khi stress (ví dụ: "Đùa cợt để giấu lo lắng", "Im lặng suy nghĩ")
-- **visual_identity**: Đặc điểm nhận diện (ví dụ: "Áo da đen, scar trên mặt", "Luôn mang kính râm")
+- **visual_identity**: Đặc điểm nhận diện CỰC KỲ CHI TIẾT (ví dụ: "Áo da đen, scar trên mặt, mắt xanh lá, tóc đen ngắn, râu ngắn", "Áo sơ mi trắng, kính mắt tròn, tóc nâu dài qua vai, không trang sức")
+  → MÔ TẢ ĐẦY ĐỦ: Mặt (hình dạng, màu da), mắt (màu, hình dạng), mũi, mồm, tai, tóc (màu, kiểu, độ dài), râu/ria mép (nếu có), quần áo (màu sắc, kiểu dáng cụ thể), phụ kiện (kính, đồng hồ, trang sức...), chiều cao/vóc dáng
+  → TUYỆT ĐỐI KHÔNG thay đổi qua các cảnh!
 - **archetype**: Hero/Mentor/Trickster/Rebel (theo 12 archetypes)
 - **fatal_flaw**: Khuyết điểm dẫn đến conflict (ví dụ: "Quá tự tin", "Không tin người")
 - **goal_external**: Mục tiêu hữu hình (ví dụ: "Tìm kho báu", "Giải cứu ai đó")
 - **goal_internal**: Biến đổi nội tâm (ví dụ: "Học cách tin tưởng", "Chấp nhận quá khứ")
 
 **Đồng nhất tuyến:** Hành động = Hệ quả từ key_trait + motivation. Phát triển từ từ qua các Act.
+
+═══════════════════════════════════════════════════════════════
+🔒 NHẤT QUÁN NHÂN VẬT QUA CÁC CẢNH (CHARACTER CONSISTENCY)
+═══════════════════════════════════════════════════════════════
+
+**CRITICAL - BẮT BUỘC:**
+
+Khi tạo prompt cho MỖI CẢNH, bạn PHẢI:
+
+1. **LẶP LẠI TOÀN BỘ visual_identity** của nhân vật xuất hiện trong cảnh đó
+   - Include trong "prompt_vi" và "prompt_tgt" của scene
+   - Không được lược bỏ bất kỳ chi tiết nào
+   - Format: "Nhân vật [Tên]: [FULL visual_identity từ character_bible], đang [action/emotion của scene]"
+
+2. **TUYỆT ĐỐI CẤM thay đổi:**
+   - ❌ Mặt, mắt, mũi, mồm, tai, hình dạng khuôn mặt
+   - ❌ Màu tóc, kiểu tóc, độ dài tóc
+   - ❌ Râu, ria mép (nếu có - không được thêm/bớt tùy tiện)
+   - ❌ Màu sắc quần áo, kiểu dáng trang phục
+   - ❌ Phụ kiện (kính, đồng hồ, trang sức...)
+   - ❌ Vóc dáng, chiều cao, thể hình
+   - ❌ Giới tính, tuổi tác
+   - ❌ Giọng nói (phải consistent với character)
+
+3. **Ví dụ ĐÚNG:**
+   Scene 1 prompt: "John, 30 tuổi nam, áo sơ mi xanh navy, quần tây đen, mắt nâu, tóc đen ngắn gọn, kính gọng đen vuông, đang đứng trong văn phòng..."
+   Scene 2 prompt: "John, 30 tuổi nam, áo sơ mi xanh navy, quần tây đen, mắt nâu, tóc đen ngắn gọn, kính gọng đen vuông, đang ngồi uống cà phê..."
+   
+   ✓ TOÀN BỘ đặc điểm giữ nguyên, chỉ hành động thay đổi
+
+4. **Ví dụ SAI (KHÔNG ĐƯỢC LÀM):**
+   Scene 1: "John, áo sơ mi xanh, tóc đen..."
+   Scene 2: "John, áo polo trắng, tóc nâu..." ← ❌ Đã thay đổi quần áo và màu tóc!
+
+═══════════════════════════════════════════════════════════════
 
 ═══════════════════════════════════════════════════════════════
 🎯 CẤU TRÚC THEO PHONG CÁCH
@@ -777,7 +944,7 @@ def generate_script(idea, style, duration_seconds, provider='Gemini 2.5', api_ke
     report_progress("Đang xây dựng prompt...", 10)
 
     # Build base prompt
-    prompt=_schema_prompt(idea=idea, style_vi=style, out_lang=output_lang, n=n, per=per, mode=mode)
+    prompt=_schema_prompt(idea=idea, style_vi=style, out_lang=output_lang, n=n, per=per, mode=mode, topic=topic)
 
     # Prepend expert intro if domain/topic selected
     if domain and topic:
