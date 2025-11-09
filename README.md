@@ -23,12 +23,14 @@
 - ✅ Hỗ trợ Gemini AI để sinh prompt
 - ✅ Xử lý batch với connection pooling
 - ✅ Ocean blue theme với tabs navigation
+- ✅ **NEW**: Lịch sử tạo video (History Tab)
 
 ### 🎯 Video Bán Hàng V5 / Sales Video
 - ✅ Tạo kịch bản bán hàng tự động
 - ✅ Character bible management
 - ✅ Scene-by-scene generation
 - ✅ Collapsible sections UI
+- ✅ **NEW**: Lịch sử tạo video (History Tab)
 
 ### 🔄 Clone Video
 - ✅ Clone video từ TikTok/YouTube
@@ -112,18 +114,47 @@ python3 main_image2video.py
 - AI sẽ tự động sinh prompt
 - Theo dõi tiến trình generation
 - Download video khi hoàn thành
+- **NEW**: Xem lịch sử tạo video trong tab "📜 Lịch sử"
 
 #### 3. **Video Bán Hàng / Sales Video**
 - Nhập thông tin sản phẩm
 - Tạo character bible
 - AI sinh kịch bản bán hàng
 - Generate từng scene
+- **NEW**: Xem lịch sử tạo video trong tab "📜 Lịch sử"
 
 #### 4. **Clone Video**
 - Paste URL TikTok/YouTube
 - Tự động download và phân tích
 - Tách scenes
 - Clone với style mới
+
+### 📜 Lịch Sử Tạo Video / Video Creation History
+
+**NEW FEATURE**: Theo dõi toàn bộ lịch sử tạo video của bạn!
+
+#### Tính năng:
+- 📊 **Tự động lưu**: Mỗi video được tạo sẽ tự động lưu vào lịch sử
+- 🔍 **Tìm kiếm**: Tìm kiếm nhanh theo ý tưởng, phong cách, hoặc thể loại
+- 📂 **Truy cập nhanh**: Click để mở thư mục chứa video
+- 🗑️ **Quản lý**: Xóa từng mục hoặc xóa toàn bộ lịch sử
+
+#### Thông tin được lưu:
+1. **Ngày giờ** - Thời điểm tạo video
+2. **Ý tưởng** - Nội dung/concept của video
+3. **Phong cách** - Style video được sử dụng
+4. **Thể loại** - Lĩnh vực/chủ đề (nếu có)
+5. **Số video** - Số lượng video được tạo
+6. **Thư mục** - Đường dẫn đến folder chứa video
+
+#### Cách sử dụng:
+1. Mở tab **Text2Video** hoặc **Video Bán Hàng**
+2. Click vào tab **"📜 Lịch sử"**
+3. Xem toàn bộ lịch sử tạo video
+4. Sử dụng ô tìm kiếm để filter
+5. Click **"📂 Mở"** để truy cập folder video
+
+**Xem thêm**: [History Tab Documentation](docs/HISTORY_TAB_FEATURE.md)
 
 ---
 
@@ -140,6 +171,8 @@ python3 main_image2video.py
 - [TTS Service](docs/TTS_SERVICE.md)
 - [Video Generation Fixes](docs/VIDEO_GENERATION_FIXES.md)
 - [New Features](docs/NEW_FEATURES.md)
+- **[History Tab Feature](docs/HISTORY_TAB_FEATURE.md)** - Video creation history tracking
+- **[History Tab UI Mockup](docs/HISTORY_TAB_UI_MOCKUP.md)** - Visual UI design
 
 ### Archive
 - [Historical Documentation](docs/archive/) - Previous versions and bug fixes
