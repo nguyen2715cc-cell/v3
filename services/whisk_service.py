@@ -2,6 +2,11 @@
 """
 Whisk Service - Complete implementation with correct API flow
 Based on real curl analysis from labs.google
+
+Features:
+- Automatic retry logic with exponential backoff for transient 5xx errors
+- Detailed error parsing and logging from API responses
+- Configurable retry parameters (max_retries, retry_delay)
 """
 import base64
 import time
