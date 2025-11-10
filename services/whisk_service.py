@@ -3,11 +3,12 @@
 Whisk Service - Complete implementation with correct API flow
 Based on real curl analysis from labs.google
 """
-import requests
 import base64
 import time
 import uuid
-from typing import Optional, Callable
+from typing import Callable, Optional
+
+import requests
 
 
 class WhiskError(Exception):
@@ -32,14 +33,14 @@ def get_session_cookies() -> str:
     5. Add to config as 'labs_session_token'
     """
     from services.core.config import load as load_config
-    
+
     # Try to get session token from config
     cfg = load_config()
     session_token = cfg.get('labs_session_token') or cfg.get('whisk_session_token')
-    
+
     if session_token:
         return f"__Secure-next-auth.session-token={session_token}"
-    
+
     # FIXED: Don't fallback to regular API keys - they won't work as session cookies
     # Fail early with clear error message instead of causing 401 errors
     raise WhiskError(
@@ -78,14 +79,14 @@ def get_bearer_token() -> str:
     Note: Bearer tokens typically expire after some time and need to be refreshed.
     """
     from services.core.config import load as load_config
-    
+
     # Try to get bearer token from config
     cfg = load_config()
     bearer_token = cfg.get('whisk_bearer_token') or cfg.get('labs_bearer_token')
-    
+
     if bearer_token:
         return bearer_token
-    
+
     # FIXED: Don't fallback to regular API keys - they won't work as OAuth bearer tokens
     # Fail early with clear error message instead of causing 401 errors
     raise WhiskError(
@@ -167,7 +168,7 @@ def caption_image(image_path: str, log_callback: Optional[Callable] = None) -> O
             }
         }
 
-        log(f"[INFO] Whisk: Captioning image...")
+        log("[INFO] Whisk: Captioning image...")
 
         response = requests.post(url, json=payload, headers=headers, timeout=60)
 
@@ -185,7 +186,7 @@ def caption_image(image_path: str, log_callback: Optional[Callable] = None) -> O
                 log(f"[INFO] Whisk: Got caption ({len(caption)} chars)")
                 return caption
         except (KeyError, TypeError, IndexError):
-            log(f"[ERROR] Could not parse caption from response")
+            log("[ERROR] Could not parse caption from response")
             return None
 
     except WhiskError as e:
@@ -268,8 +269,8 @@ def upload_image_whisk(image_path: str, workflow_id: str, session_id: str, log_c
             media_id = data['result']['data']['json']['result']['uploadMediaGenerationId']
             log(f"[INFO] Whisk: Got mediaGenerationId: {media_id[:30]}...")
             return media_id
-        except (KeyError, TypeError) as e:
-            log(f"[ERROR] No mediaGenerationId in upload response")
+        except (KeyError, TypeError):
+            log("[ERROR] No mediaGenerationId in upload response")
             log(f"[DEBUG] Response structure: {str(data)[:200]}")
             return None
 
@@ -291,7 +292,9 @@ def run_image_recipe(
     workflow_id: str,
     session_id: str,
     aspect_ratio: str = "IMAGE_ASPECT_RATIO_PORTRAIT",
-    log_callback: Optional[Callable] = None
+    log_callback: Optional[Callable] = None,
+    max_retries: int = 3,
+    retry_delay: float = 2.0
 ) -> Optional[bytes]:
     """
     Step 3: Run image recipe with Whisk API
@@ -303,6 +306,8 @@ def run_image_recipe(
         session_id: Session ID
         aspect_ratio: Aspect ratio (IMAGE_ASPECT_RATIO_PORTRAIT, IMAGE_ASPECT_RATIO_SQUARE, etc.)
         log_callback: Optional logging callback
+        max_retries: Maximum number of retry attempts for transient errors (default: 3)
+        retry_delay: Initial delay between retries in seconds (default: 2.0, uses exponential backoff)
         
     Returns:
         Generated image bytes or None if failed
@@ -310,13 +315,13 @@ def run_image_recipe(
     def log(msg):
         if log_callback:
             log_callback(msg)
-    
+
     try:
         # Get bearer token for API authentication - this may raise WhiskError if not configured
         bearer_token = get_bearer_token()
-        
+
         url = "https://aisandbox-pa.googleapis.com/v1/whisk:runImageRecipe"
-        
+
         headers = {
             "authorization": f"Bearer {bearer_token}",
             "content-type": "text/plain;charset=UTF-8",
@@ -324,11 +329,11 @@ def run_image_recipe(
             "referer": "https://labs.google/",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
-        
+
         # Generate random seed for image generation
         import random
         seed = random.randint(100000, 999999)
-        
+
         # Correct payload structure matching Google Labs API
         payload = {
             "clientContext": {
@@ -344,75 +349,126 @@ def run_image_recipe(
             "userInstruction": prompt,
             "recipeMediaInputs": recipe_media_inputs
         }
-        
+
         log("[INFO] Whisk: Running image recipe...")
-        
-        response = requests.post(url, json=payload, headers=headers, timeout=120)
-        
-        if response.status_code != 200:
-            log(f"[ERROR] Whisk recipe failed with status {response.status_code}")
-            log(f"[DEBUG] Response: {response.text[:200]}")
-            return None
-        
-        data = response.json()
-        
-        # Parse the response to get generation ID or result
-        # Response structure may vary, typical patterns:
-        # 1. Immediate result with image data
-        # 2. Generation ID for polling
-        
-        try:
-            # Try to extract image data if available immediately
-            if 'imageRecipeResult' in data:
-                result = data['imageRecipeResult']
-                
-                # Check for direct image data
-                if 'generatedImage' in result:
-                    img_data = result['generatedImage']
-                    if 'rawBytes' in img_data:
-                        # Base64 encoded image
-                        b64_data = img_data['rawBytes']
-                        if b64_data.startswith('data:'):
-                            # Extract base64 part from data URI
-                            b64_data = b64_data.split(',', 1)[1]
-                        return base64.b64decode(b64_data)
-                    elif 'signedUrl' in img_data or 'downloadUrl' in img_data:
-                        # Download from URL
-                        download_url = img_data.get('signedUrl') or img_data.get('downloadUrl')
-                        log(f"[INFO] Whisk: Downloading image from URL...")
-                        img_response = requests.get(download_url, timeout=60)
-                        if img_response.status_code == 200:
-                            return img_response.content
-                
-                # Check for generation ID for polling
-                if 'generationId' in result or 'mediaGenerationId' in result:
-                    gen_id = result.get('generationId') or result.get('mediaGenerationId')
-                    log(f"[INFO] Whisk: Got generation ID: {gen_id[:30]}...")
-                    # NOTE: Async generation polling not yet implemented
-                    # Whisk API returns generation ID for async requests that need to be polled
-                    # This is a known limitation - immediate results only
-                    log(f"[LIMITATION] Whisk: Async polling not implemented - only immediate results supported")
+
+        # Retry logic for transient errors (500, 503, etc.)
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    delay = retry_delay * (2 ** (attempt - 1))  # Exponential backoff
+                    log(f"[RETRY] Attempt {attempt + 1}/{max_retries} after {delay}s delay...")
+                    time.sleep(delay)
+
+                response = requests.post(url, json=payload, headers=headers, timeout=120)
+
+                if response.status_code != 200:
+                    # Try to parse error response as JSON
+                    error_details = None
+                    try:
+                        error_data = response.json()
+                        if 'error' in error_data:
+                            error_info = error_data['error']
+                            error_code = error_info.get('code', response.status_code)
+                            error_message = error_info.get('message', 'Unknown error')
+                            error_status = error_info.get('status', 'UNKNOWN')
+                            error_details = f"Code: {error_code}, Status: {error_status}, Message: {error_message}"
+                    except:
+                        # If JSON parsing fails, use raw text
+                        error_details = response.text[:300]
+
+                    # Check if error is retryable (5xx server errors)
+                    if response.status_code >= 500 and response.status_code < 600 and attempt < max_retries - 1:
+                        log(f"[ERROR] Whisk recipe failed with status {response.status_code} (transient error)")
+                        if error_details:
+                            log(f"[DEBUG] Error details: {error_details}")
+                        last_error = f"HTTP {response.status_code}: {error_details}"
+                        continue  # Retry
+                    else:
+                        # Non-retryable error or final attempt
+                        log(f"[ERROR] Whisk recipe failed with status {response.status_code}")
+                        if error_details:
+                            log(f"[DEBUG] Error details: {error_details}")
+                        else:
+                            log(f"[DEBUG] Response: {response.text[:200]}")
+                        return None
+
+                # Success - parse response
+                data = response.json()
+
+                # Parse the response to get generation ID or result
+                # Response structure may vary, typical patterns:
+                # 1. Immediate result with image data
+                # 2. Generation ID for polling
+
+                try:
+                    # Try to extract image data if available immediately
+                    if 'imageRecipeResult' in data:
+                        result = data['imageRecipeResult']
+
+                        # Check for direct image data
+                        if 'generatedImage' in result:
+                            img_data = result['generatedImage']
+                            if 'rawBytes' in img_data:
+                                # Base64 encoded image
+                                b64_data = img_data['rawBytes']
+                                if b64_data.startswith('data:'):
+                                    # Extract base64 part from data URI
+                                    b64_data = b64_data.split(',', 1)[1]
+                                return base64.b64decode(b64_data)
+                            elif 'signedUrl' in img_data or 'downloadUrl' in img_data:
+                                # Download from URL
+                                download_url = img_data.get('signedUrl') or img_data.get('downloadUrl')
+                                log("[INFO] Whisk: Downloading image from URL...")
+                                img_response = requests.get(download_url, timeout=60)
+                                if img_response.status_code == 200:
+                                    return img_response.content
+
+                        # Check for generation ID for polling
+                        if 'generationId' in result or 'mediaGenerationId' in result:
+                            gen_id = result.get('generationId') or result.get('mediaGenerationId')
+                            log(f"[INFO] Whisk: Got generation ID: {gen_id[:30]}...")
+                            # NOTE: Async generation polling not yet implemented
+                            # Whisk API returns generation ID for async requests that need to be polled
+                            # This is a known limitation - immediate results only
+                            log("[LIMITATION] Whisk: Async polling not implemented - only immediate results supported")
+                            return None
+
+                    log("[ERROR] Whisk: Unexpected response structure")
+                    log(f"[DEBUG] Response keys: {list(data.keys())}")
                     return None
-            
-            log(f"[ERROR] Whisk: Unexpected response structure")
-            log(f"[DEBUG] Response keys: {list(data.keys())}")
-            return None
-            
-        except (KeyError, TypeError, IndexError) as e:
-            log(f"[ERROR] Whisk: Failed to parse response - {str(e)}")
-            log(f"[DEBUG] Response: {str(data)[:300]}")
-            return None
-    
+
+                except (KeyError, TypeError, IndexError) as e:
+                    log(f"[ERROR] Whisk: Failed to parse response - {str(e)}")
+                    log(f"[DEBUG] Response: {str(data)[:300]}")
+                    return None
+
+            except requests.exceptions.RequestException as e:
+                # Network/timeout errors - retry if attempts remain
+                if attempt < max_retries - 1:
+                    log(f"[ERROR] Request failed: {str(e)[:100]} - will retry")
+                    last_error = str(e)
+                    continue
+                else:
+                    log(f"[ERROR] Request failed after {max_retries} attempts: {str(e)[:100]}")
+                    return None
+
+        # If we get here, all retries failed
+        if last_error:
+            log(f"[ERROR] All {max_retries} attempts failed. Last error: {last_error[:200]}")
+        return None
+
     except WhiskError as e:
         # Don't truncate WhiskError messages - they contain important setup instructions
         log(f"[ERROR] Whisk configuration error: {str(e)}")
-        return None        
+        return None
     except Exception as e:
         log(f"[ERROR] Whisk: runImageRecipe failed - {str(e)[:200]}")
         return None
 
 
-def generate_image(prompt: str, model_image: Optional[str] = None, product_image: Optional[str] = None, 
+def generate_image(prompt: str, model_image: Optional[str] = None, product_image: Optional[str] = None,
                    aspect_ratio: str = "IMAGE_ASPECT_RATIO_PORTRAIT", debug_callback: Optional[Callable] = None) -> Optional[bytes]:
     """
     Generate image using Whisk with reference images
@@ -438,7 +494,7 @@ def generate_image(prompt: str, model_image: Optional[str] = None, product_image
 
     try:
         log("[INFO] Whisk: Starting generation...")
-        
+
         # Early validation: Check if required configuration is available
         # This provides clear error messages before attempting API calls
         try:
@@ -505,7 +561,7 @@ def generate_image(prompt: str, model_image: Optional[str] = None, product_image
 
         # Step 3: Run image recipe with OAuth
         log("[INFO] Whisk: Running image recipe with Bearer token...")
-        
+
         result_image = run_image_recipe(
             prompt=prompt,
             recipe_media_inputs=recipe_media_inputs,
@@ -514,7 +570,7 @@ def generate_image(prompt: str, model_image: Optional[str] = None, product_image
             aspect_ratio=aspect_ratio,
             log_callback=log
         )
-        
+
         if result_image:
             log("[INFO] Whisk: Image generation complete!")
             return result_image
