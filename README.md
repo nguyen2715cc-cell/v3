@@ -78,11 +78,24 @@ pip install -r requirements.txt
 - See **[OAuth Token Guide](docs/OAUTH_TOKEN_GUIDE.md)** for detailed instructions
 - Quick method: Open DevTools on labs.google → Network tab → Copy bearer token from requests
 
-**Whisk Configuration (Optional - for rate limit fallback):**
-- `labs_tokens`: Bearer tokens for Google Labs API (for Whisk image generation)
-- Whisk is automatically used as fallback when all Gemini API keys hit rate limits
-- To get a Labs token, inspect network requests on https://labs.google/fx/tools/whisk
-- Whisk requires reference images to work (model/product images)
+**🎨 Whisk Authentication (NEW - for Image Generation):**
+
+Whisk requires **two types of authentication** from labs.google.com:
+
+1. **Session Token** (`labs_session_token`):
+   - Cookie: `__Secure-next-auth.session-token`
+   - Get from: DevTools → Application → Cookies on https://labs.google/fx/tools/whisk
+
+2. **Bearer Token** (`whisk_bearer_token`):
+   - OAuth token from API requests
+   - Get from: DevTools → Network → Authorization header on https://labs.google/fx/tools/whisk
+
+Both can be configured via **Settings → Whisk Authentication** in the UI.
+
+**📁 Where are tokens stored?**
+- See **[Token Storage Documentation](docs/TOKEN_STORAGE.md)** for complete details
+- All credentials are stored locally in `~/.veo_image2video_cfg.json`
+- Never commit this file to version control!
 
 2. (Tùy chọn) Tạo file `.env` cho API keys:
 
